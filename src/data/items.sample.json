@@ -1,0 +1,7 @@
+{
+    "version": 1,
+    "items": [
+        { "name": "Leche", "category": "Lácteos/Huevos", "status": "needed", "note": "", "price": 0 },
+        { "name": "Pan", "category": "Panadería", "status": "stocked", "note": "", "price": 0 }
+    ]
+}

@@ -1,0 +1,29 @@
+# --- Datos sensibles (NO versionar) ---
+# Base de datos real (lista + inventario del hogar)
+src/data/items.json
+src/data/items.json.bkp
+*.bkp
+
+# Credencial: hash de la contraseña de acceso
+src/auth.php
+
+# Credenciales de despliegue (FTP/SFTP) — nunca versionar
+deploy.local.ini
+
+# --- Sistema operativo ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+._*
+
+# --- Editores / IDE ---
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- Logs / temporales ---
+*.log
+error_log
+php_errorlog

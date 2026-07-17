@@ -1,0 +1,106 @@
+:root { --primary: #007bff; --bg: #f4f7f6; --card: #ffffff; --text: #333; --danger: #dc3545; --success: #28a745; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* Padding extra abajo para que la barra de total no tape el contenido */
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; padding-bottom: 110px; }
+
+.app-header { background: white; padding: 15px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+.app-header h1 { margin: 0; font-size: 1.2rem; color: var(--primary); }
+.logout-link { font-size: 0.8rem; color: #999; text-decoration: none; }
+
+.tabs { display: flex; background: white; border-bottom: 1px solid #eee; position: sticky; top: 58px; z-index: 99; }
+.tab-btn { flex: 1; padding: 15px; text-align: center; border: none; background: none; font-weight: 600; color: #888; border-bottom: 3px solid transparent; cursor: pointer; transition: 0.2s; }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+.container { padding: 15px; max-width: 600px; margin: 0 auto; }
+.hidden { display: none !important; }
+
+/* LISTA DE COMPRA */
+.category-group { background: white; border-radius: 12px; margin-bottom: 20px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+.cat-header { background: #f8f9fa; padding: 10px 15px; font-size: 0.85rem; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+.item-row { padding: 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0f0f0; transition: background 0.2s; }
+.item-row:last-child { border-bottom: none; }
+.item-row:active { background: #f9f9f9; }
+.item-name { font-size: 1rem; font-weight: 500; }
+.item-note { font-size: 0.8rem; color: #888; display: block; margin-top: 2px; }
+.item-price { font-size: 0.85rem; color: #28a745; font-weight: bold; margin-left: 5px; }
+
+/* ESTILOS NUEVOS: MODO CARRITO */
+.item-row.in-cart .item-name { text-decoration: line-through; color: #bbb; }
+.item-row.in-cart .item-price { color: #bbb; }
+.item-row.in-cart .item-note { color: #ddd; }
+
+.check-circle { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #ddd; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
+/* Check verde para inventario (ya tengo) */
+.check-circle.checked { background: var(--success); border-color: var(--success); color: white; }
+/* Check azul para carrito (comprando ahora) */
+.check-circle.in-cart { background: var(--primary); border-color: var(--primary); }
+.check-circle.in-cart::after { content: '✓'; color: white; font-size: 16px; }
+
+/* INVENTARIO */
+.inv-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px; margin-bottom: 8px; border-radius: 8px; border-left: 5px solid #ddd; }
+.inv-item.needed { border-left-color: var(--primary); } 
+.inv-item.stocked { border-left-color: var(--success); opacity: 0.75; }
+
+.btn-action { padding: 6px 12px; border-radius: 20px; border: none; font-size: 0.85rem; cursor: pointer; margin-left: 5px; }
+.btn-add { background: var(--primary); color: white; }
+.btn-have { background: #eee; color: #333; }
+.btn-del { background: #ffebee; color: var(--danger); }
+.btn-edit { background: #e3f2fd; color: var(--primary); }
+
+/* FORMULARIOS Y MODALES */
+.add-panel { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+.form-group { margin-bottom: 10px; }
+input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; -webkit-appearance: none; background: white; }
+.btn-submit { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
+
+/* MODAL OVERLAY */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 200;
+    animation: fadeIn 0.2s;
+}
+
+.modal {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: white; width: 90%; max-width: 400px;
+    padding: 20px; border-radius: 12px; z-index: 201;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    animation: slideUp 0.2s;
+}
+
+.btn-cancel { flex: 1; padding: 12px; background: #eee; color: #333; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+
+/* BARRA TOTAL Y CHECKOUT */
+.total-bar {
+    position: fixed; bottom: 0; left: 0; width: 100%;
+    background: white; 
+    border-top: 1px solid #eee;
+    padding: 15px; 
+    box-shadow: 0 -4px 15px rgba(0,0,0,0.05);
+    z-index: 1000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.total-info { display: flex; flex-direction: column; }
+.total-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.total-amount { font-size: 1.3rem; font-weight: 800; color: #333; }
+.cart-subtotal { font-size: 0.85rem; color: var(--primary); font-weight: 600; margin-top: 2px; }
+
+.btn-checkout {
+    background: var(--success); color: white; border: none;
+    padding: 12px 20px; border-radius: 30px;
+    font-weight: bold; font-size: 0.95rem;
+    box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
+    cursor: pointer;
+    display: none; /* Oculto si no hay nada en carrito */
+    animation: fadeIn 0.3s;
+}
+.btn-checkout:active { transform: scale(0.95); }
+
+.empty-state { text-align: center; padding: 40px 20px; color: #999; }
+.toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 10px 20px; border-radius: 50px; font-size: 0.9rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translate(-50%, -40%); opacity: 0; } to { transform: translate(-50%, -50%); opacity: 1; } }
