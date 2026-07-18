@@ -22,7 +22,28 @@ ni ninguna línea de Claude al mensaje del commit.
   remote_path=./ruta/en/el/servidor/
   ```
 
-## Despliegue
+## Despliegue (DreamHost, SFTP)
+
+Mismo servidor que **payman**, en el directorio remoto `./jezerart.com/compra/`.
+Sitio en vivo: https://jezerart.com/compra/. Credenciales en `deploy.local.ini`
+(ignorado por git). Se usa `curl` con libssh2 (no interactivo; `sshpass` no está).
+
+Leer credenciales y definir base remota:
+```sh
+HOST=$(grep '^host=' deploy.local.ini | cut -d= -f2)
+USER=$(grep '^user=' deploy.local.ini | cut -d= -f2)
+PASS=$(grep '^password=' deploy.local.ini | cut -d= -f2)
+BASE="sftp://$HOST/~/jezerart.com/compra"
+```
+
+- **Listar:**   `curl -s --user "$USER:$PASS" "$BASE/data/"`
+- **Descargar:** `curl -s --user "$USER:$PASS" "$BASE/app.js" -o /tmp/app.js`
+- **Subir código:** `curl -s --user "$USER:$PASS" -T src/app.js "$BASE/app.js"`
+
+### Reglas
 - Subir SOLO archivos de código: `index.php`, `api.php`, `app.js`, `style.css`.
 - **NUNCA** subir/sobrescribir `data/items.json` (datos reales) ni `auth.php`.
+- La DB vive en el servidor en `data/items.json` (movida ahí desde la raíz el
+  2026-07-17). `data/.htaccess` niega el acceso web directo.
 - Verificar tras subir: descargar el archivo y `diff` contra `src/`.
+- El cache-buster (`?v=<?php echo time(); ?>`) evita tener que limpiar caché.
