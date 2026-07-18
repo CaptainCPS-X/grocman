@@ -37,60 +37,23 @@ function catOptions($cats) {
 
 // Script del fondo de olas (compartido por login y app)
 $WAVES_JS = <<<'JS'
+// --- Fondo dinámico de olas (canvas), estilo PS3-XMB, con la paleta glass ---
 (function () {
-    const canvas = document.getElementById('bg-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let W, H, dpr;
-    function resize() {
-        dpr = Math.min(window.devicePixelRatio || 1, 2);
-        W = canvas.width = innerWidth * dpr;
-        H = canvas.height = innerHeight * dpr;
-        canvas.style.width = innerWidth + 'px';
-        canvas.style.height = innerHeight + 'px';
-    }
-    resize();
-    addEventListener('resize', resize);
-    const ribbons = [
-        { amp: 0.10, len: 0.9, speed: 0.00022, y: 0.44, hue: 'rgba(99,140,255,0.20)', off: 0 },
-        { amp: 0.08, len: 1.2, speed: 0.00030, y: 0.56, hue: 'rgba(160,120,255,0.17)', off: 2 },
-        { amp: 0.12, len: 0.7, speed: 0.00018, y: 0.70, hue: 'rgba(110,210,255,0.15)', off: 4 }
-    ];
-    const particles = Array.from({ length: 34 }, () => ({
-        x: Math.random(), y: Math.random(), r: Math.random() * 1.6 + 0.5, s: Math.random() * 0.00006 + 0.00002
-    }));
-    function draw(t) {
-        ctx.clearRect(0, 0, W, H);
-        ribbons.forEach(function (r) {
-            ctx.beginPath();
-            const baseY = H * r.y;
-            for (let i = 0; i <= 40; i++) {
-                const x = (i / 40) * W;
-                const y = baseY + Math.sin(t * r.speed + i * r.len * 0.35 + r.off) * H * r.amp;
-                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-            }
-            ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
-            ctx.fillStyle = r.hue; ctx.fill();
-        });
-        particles.forEach(function (p) {
-            p.y -= p.s * (reduce ? 0 : 1);
-            if (p.y < -0.02) { p.y = 1.02; p.x = Math.random(); }
-            ctx.beginPath();
-            ctx.arc(p.x * W, p.y * H, p.r * dpr, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fill();
-        });
-    }
-    let raf, running = true;
-    function loop(t) { if (!running) return; draw(t); raf = requestAnimationFrame(loop); }
-    if (reduce) { draw(0); }
-    else {
-        loop(0);
-        document.addEventListener('visibilitychange', function () {
-            running = !document.hidden;
-            if (running) raf = requestAnimationFrame(loop); else cancelAnimationFrame(raf);
-        });
-    }
+    var c = document.getElementById('bg-canvas'); if (!c) return;
+    var ctx = c.getContext('2d');
+    var reduced = matchMedia('(prefers-reduced-motion: reduce)');
+    // Paleta acorde al tema: azul (acento), lila y cian sobre base clara.
+    var PAL = { waves: ['0,123,255', '150,110,255', '60,195,230'], part: '90,130,235' };
+    var t = Math.random() * 100, parts = [], raf = 0;
+    function seed() { var n = Math.round(Math.min(70, innerWidth / 20)); parts = []; for (var i = 0; i < n; i++) parts.push({ x: Math.random() * innerWidth, y: Math.random() * innerHeight, r: .8 + Math.random() * 2, vx: .08 + Math.random() * .25, vy: -(.03 + Math.random() * .14), p: Math.random() * Math.PI * 2 }); }
+    function resize() { var dpr = Math.min(devicePixelRatio || 1, 2); c.width = Math.round(innerWidth * dpr); c.height = Math.round(innerHeight * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); seed(); }
+    // Una cinta translúcida: cresta sinusoidal rellena hasta el borde inferior.
+    function ribbon(yMid, amp, freq, speed, phase, rgb, alpha) { var W = innerWidth, H = innerHeight; ctx.beginPath(); ctx.moveTo(0, H); for (var x = 0; x <= W; x += 8) { var k = x / W; var y = yMid + Math.sin(k * freq * Math.PI * 2 + t * speed + phase) * amp + Math.sin(k * freq * 4.7 + t * speed * 1.6 + phase * 2) * amp * .35; ctx.lineTo(x, y); } ctx.lineTo(W, H); ctx.closePath(); var g = ctx.createLinearGradient(0, yMid - amp, 0, H); g.addColorStop(0, 'rgba(' + rgb + ',' + alpha + ')'); g.addColorStop(1, 'rgba(' + rgb + ',0)'); ctx.fillStyle = g; ctx.fill(); }
+    function frame() { var W = innerWidth, H = innerHeight; ctx.clearRect(0, 0, W, H); ribbon(H * .55, H * .06, 1.1, .35, 0, PAL.waves[0], .22); ribbon(H * .62, H * .05, 1.6, .5, 2.1, PAL.waves[1], .18); ribbon(H * .70, H * .04, 2.2, .7, 4.2, PAL.waves[2], .14); for (var i = 0; i < parts.length; i++) { var p = parts[i]; p.x += p.vx; p.y += p.vy; p.p += .02; if (p.x > W + 10) p.x = -10; if (p.y < -10) p.y = H + 10; ctx.beginPath(); ctx.fillStyle = 'rgba(' + PAL.part + ',' + (.12 + .35 * (.5 + Math.sin(p.p) / 2)).toFixed(3) + ')'; ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); } t += .016; }
+    function loop() { frame(); raf = requestAnimationFrame(loop); }
+    resize(); if (reduced.matches) frame(); else loop();
+    addEventListener('resize', function () { resize(); if (reduced.matches) frame(); });
+    document.addEventListener('visibilitychange', function () { if (reduced.matches) return; cancelAnimationFrame(raf); if (!document.hidden) loop(); });
 })();
 JS;
 
