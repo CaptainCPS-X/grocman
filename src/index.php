@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once __DIR__ . '/session.php';
+startSession();
 
 // --- 1. AUTENTICACIÓN ---
 if (file_exists(__DIR__ . '/auth.php')) {
@@ -9,8 +10,8 @@ if (file_exists(__DIR__ . '/auth.php')) {
 // Login
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
     if (isset($stored_hash) && password_verify($_POST['password'], $stored_hash)) {
-        $_SESSION['authenticated'] = true;
-        header('Location: ' . $_SERVER['PHP_SELF']);
+        loginSession();
+        header('Location: ' . $_SERVER['SCRIPT_NAME']);
         exit();
     } else {
         $error = "Contraseña incorrecta";
@@ -19,8 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
 
 // Logout
 if (isset($_GET['logout'])) {
-    session_destroy();
-    header('Location: ' . $_SERVER['PHP_SELF']);
+    logoutSession();
+    header('Location: ' . $_SERVER['SCRIPT_NAME']);
     exit();
 }
 
@@ -58,7 +59,7 @@ $WAVES_JS = <<<'JS'
 JS;
 
 // --- 2. PANTALLA DE LOGIN ---
-if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+if (!isAuthenticated()) {
     ?>
     <!DOCTYPE html>
     <html lang="es">

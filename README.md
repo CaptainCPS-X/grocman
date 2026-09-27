@@ -21,6 +21,7 @@ carrito) → `stocked` (en casa).
 | Archivo | Rol |
 |---|---|
 | `src/index.php` | Login (sesión PHP) y renderizado de la SPA. |
+| `src/session.php` | Sesión propia (`GROCMANSESS`, ruta `/compra/`), compartida por `index.php` y `api.php`. |
 | `src/auth.php` | Hash bcrypt de la contraseña. **No versionado.** |
 | `src/api.php` | API JSON: `GET` lee, `POST` guarda. Versionado optimista con `409 Conflict`. |
 | `src/app.js` | Lógica de UI: lista, inventario, carrito, totales, CRUD. |

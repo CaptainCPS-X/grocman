@@ -1,9 +1,10 @@
 <?php
-session_start();
+require_once __DIR__ . '/session.php';
+startSession();
 header('Content-Type: application/json');
 
 // Proteger API: Si no está logueado, error 401
-if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+if (!isAuthenticated()) {
     http_response_code(401);
     echo json_encode(['error' => 'No autorizado']);
     exit();

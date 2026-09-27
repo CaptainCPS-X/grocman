@@ -38,10 +38,11 @@ BASE="sftp://$HOST/~/jezerart.com/compra"
 
 - **Listar:**   `curl -s --user "$USER:$PASS" "$BASE/data/"`
 - **Descargar:** `curl -s --user "$USER:$PASS" "$BASE/app.js" -o /tmp/app.js`
-- **Subir código:** `curl -s --user "$USER:$PASS" -T src/app.js "$BASE/app.js"`
+- **Subir código:** `curl -sS --user "$USER:$PASS" -T src/app.js "$BASE/app.js"`
 
 ### Reglas
-- Subir SOLO archivos de código: `index.php`, `api.php`, `app.js`, `style.css`.
+- Subir SOLO archivos de código: `index.php`, `api.php`, `session.php`,
+  `app.js`, `style.css`.
 - **NUNCA** subir/sobrescribir `data/items.json` (datos reales) ni `auth.php`.
 - La DB vive en el servidor en `data/items.json` (movida ahí desde la raíz el
   2026-07-17). `data/.htaccess` niega el acceso web directo.
