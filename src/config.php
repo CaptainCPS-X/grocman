@@ -11,3 +11,5 @@ const LOGIN_LOCK_SECONDS = 900;      // bloqueo de 15 minutos
 
 const ITEM_NAME_MAX = 120;
 const ITEM_NOTE_MAX = 500;
+const ITEM_BARCODES_MAX = 30;       // productos asociados por artículo
+const BARCODE_LABEL_MAX = 200;

@@ -42,8 +42,9 @@ BASE="sftp://$HOST/~/jezerart.com/compra"
 
 ### Reglas
 - Subir SOLO archivos de código: `index.php`, `api.php`, `config.php`,
-  `session.php`, `app.js`, `style.css`. Orden: primero `config.php` y
-  `session.php` (los demás los requieren), al final `app.js`.
+  `session.php`, `app.js`, `style.css` y `vendor/` (lector ZXing para el
+  escáner). Orden: primero `config.php`, `session.php` y `vendor/` (los demás
+  los usan), al final `app.js`.
 - **NUNCA** subir/sobrescribir `data/items.json` (datos reales) ni `auth.php`.
 - La DB vive en el servidor en `data/items.json` (movida ahí desde la raíz el
   2026-07-17). `data/.htaccess` niega el acceso web directo y **debe existir**:

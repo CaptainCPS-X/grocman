@@ -16,6 +16,22 @@ archivo JSON plano.
 Cada artículo tiene un estado: `needed` (por comprar) → `in_cart` (en el
 carrito) → `stocked` (en casa).
 
+### Productos y escáner de códigos de barras
+
+Cada artículo puede tener varios **productos equivalentes** asociados por su
+código de barras (p. ej. "Leche" → galón Horizon, galón Great Value). En
+*Agregar* o *Editar* → **Escanear producto** se abre la cámara:
+
+- Lector nativo del navegador (`BarcodeDetector`, Android/Chrome) o, si no
+  existe (iPhone), **ZXing** (`src/vendor/`, Apache-2.0), que se carga solo al
+  abrir el escáner. También se puede escribir el número.
+- Se aceptan EAN-13, EAN-8, UPC-A, UPC-E e ITF-14 con dígito de control válido,
+  normalizados (UPC-A → EAN-13, UPC-E → UPC-A) para que el mismo producto tenga
+  siempre el mismo código. Cada código pertenece a un solo artículo.
+- El nombre del producto se busca en **Open Food Facts** (y, si no está, en Open
+  Beauty Facts y Open Products Facts) directamente desde el navegador; solo se
+  envía el número del código. En *Agregar* rellena el nombre y la categoría.
+
 ## Estructura
 
 | Archivo | Rol |
@@ -29,6 +45,7 @@ carrito) → `stocked` (en casa).
 | `src/style.css` | Estilos. |
 | `src/data/` | Directorio de la base de datos, separado del código. |
 | `src/data/items.json` | "Base de datos" (artículos). **No versionado.** |
+| `src/vendor/` | ZXing (lector de códigos de barras para navegadores sin lector nativo). |
 | `src/data/.htaccess` | Bloquea el acceso web directo a la base de datos. |
 | `tests/smoke.mjs` | Prueba de humo de la API y el login: `node tests/smoke.mjs`. |
 

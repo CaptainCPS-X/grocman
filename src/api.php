@@ -89,11 +89,27 @@ function saveDB($data) {
     }
 }
 
+// Código de barras de producto (GTIN) normalizado: solo dígitos; un UPC-A de 12
+// dígitos pasa a EAN-13 con un 0 delante y un GTIN-14 que empieza en 0 pasa a
+// 13, para que el mismo producto tenga siempre el mismo código sin importar
+// qué lector lo leyó. Devuelve null si no es un GTIN válido (8, 13 o 14 dígitos
+// con su dígito de control correcto).
+function normalizeBarcode($code) {
+    if (!is_string($code) || !preg_match('/^[0-9]{8,14}$/', $code)) { return null; }
+    if (strlen($code) === 12) { $code = '0' . $code; }
+    if (strlen($code) === 14 && $code[0] === '0') { $code = substr($code, 1); }
+    if (!in_array(strlen($code), [8, 13, 14], true)) { return null; }
+    $sum = 0;
+    for ($i = strlen($code) - 2, $w = 3; $i >= 0; $i--, $w = 4 - $w) { $sum += (int)$code[$i] * $w; }
+    return ((10 - $sum % 10) % 10) === (int)substr($code, -1) ? $code : null;
+}
+
 // Valida y normaliza los artículos que envía el cliente; null si son inválidos.
 function cleanItems($items) {
     if (!is_array($items) || array_values($items) !== $items) { return null; }
     $out = [];
     $seen = [];
+    $seenCodes = [];
     foreach ($items as $it) {
         if (!is_array($it) || !is_string($it['name'] ?? null)) { return null; }
         $name = trim($it['name']);
@@ -106,13 +122,27 @@ function cleanItems($items) {
         if (!is_numeric($price) || $price < 0) { return null; }
         $note = is_string($it['note'] ?? null) ? $it['note'] : '';
         if (strlen($note) > ITEM_NOTE_MAX * 4) { return null; }
-        $out[] = [
+        // Productos (códigos de barras) asociados: cada código pertenece a un solo artículo.
+        $barcodes = [];
+        $rawCodes = $it['barcodes'] ?? [];
+        if (!is_array($rawCodes) || count($rawCodes) > ITEM_BARCODES_MAX) { return null; }
+        foreach ($rawCodes as $b) {
+            $code = normalizeBarcode(is_array($b) ? ($b['code'] ?? null) : null);
+            if ($code === null || isset($seenCodes[$code])) { return null; }
+            $seenCodes[$code] = true;
+            $label = is_string($b['label'] ?? null) ? trim($b['label']) : '';
+            if (strlen($label) > BARCODE_LABEL_MAX * 4) { return null; }
+            $barcodes[] = ['code' => $code, 'label' => $label];
+        }
+        $clean = [
             'name' => $name,
             'category' => in_array($it['category'] ?? null, CATS, true) ? $it['category'] : 'Otros',
             'status' => in_array($it['status'] ?? null, STATUSES, true) ? $it['status'] : 'needed',
             'note' => trim($note),
             'price' => round((float)$price, 2),
         ];
+        if ($barcodes) { $clean['barcodes'] = $barcodes; }
+        $out[] = $clean;
     }
     return $out;
 }

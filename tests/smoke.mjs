@@ -109,6 +109,20 @@ try {
     check('backup diario creado', fs.existsSync(path.join(DATA_DIR, 'backups')) && fs.readdirSync(path.join(DATA_DIR, 'backups')).length === 1);
     check('no quedan temporales', !fs.existsSync(DATA + '.tmp'));
 
+    console.log('Productos (códigos de barras)');
+    const bc = (code, label = '') => ({ code, label });
+    const withCodes = await post({ version: v(), items: [item({ name: 'Leche', barcodes: [bc('742365264450', 'Horizon Organic · Organic Whole Milk · 1.85 l'), bc('00078742351865')] })] });
+    const saved = readData().items[0].barcodes || [];
+    check('guardar productos → 200', withCodes.status === 200, withCodes.text);
+    check('UPC-A de 12 dígitos se guarda como EAN-13 (0 delante)', saved[0]?.code === '0742365264450' && saved[0]?.label.startsWith('Horizon'), JSON.stringify(saved));
+    check('GTIN-14 con 0 delante se guarda como EAN-13', saved[1]?.code === '0078742351865', JSON.stringify(saved));
+    check('dígito de control incorrecto → 400', (await post({ version: v(), items: [item({ barcodes: [bc('0742365264451')] })] })).status === 400);
+    check('código no numérico → 400', (await post({ version: v(), items: [item({ barcodes: [bc('abc123')] })] })).status === 400);
+    check('mismo código en dos artículos → 400', (await post({ version: v(), items: [item({ barcodes: [bc('0742365264450')] }), item({ name: 'Otra leche', barcodes: [bc('742365264450')] })] })).status === 400);
+    check('etiqueta demasiado larga → 400', (await post({ version: v(), items: [item({ barcodes: [bc('0742365264450', 'x'.repeat(900))] })] })).status === 400);
+    await post({ version: v(), items: [item({ name: 'Leche', barcodes: [] })] });
+    check('lista de productos vacía no se guarda como campo', !('barcodes' in readData().items[0]));
+
     console.log('Guardados simultáneos (misma versión)');
     const base = v();
     const results = await Promise.all([1, 2, 3, 4].map(n => post({ version: base, items: [item({ name: `Cosa ${n}` })] })));

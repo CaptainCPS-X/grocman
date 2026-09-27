@@ -169,6 +169,11 @@ if (!isAuthenticated()) {
         <h3 class="sheet-title" id="add-sheet-title">Agregar artículo</h3>
         <form class="form" onsubmit="app.addItem(event)">
             <div class="field">
+                <span class="field-label">Producto <span class="opt">(opcional)</span></span>
+                <div class="barcode-list" id="new-barcodes"></div>
+                <button type="button" class="btn-scan" onclick="app.scanForAdd()"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg><span>Escanear producto</span></button>
+            </div>
+            <div class="field">
                 <label for="new-name">Nombre</label>
                 <input type="text" id="new-name" placeholder="Ej. Leche" required>
             </div>
@@ -210,10 +215,35 @@ if (!isAuthenticated()) {
                 <label for="edit-note">Nota <span class="opt">(opcional)</span></label>
                 <input type="text" id="edit-note" placeholder="Marca, tamaño…">
             </div>
+            <div class="field">
+                <span class="field-label">Productos <span class="opt">(códigos de barras)</span></span>
+                <div class="barcode-list" id="edit-barcodes"></div>
+                <button type="button" class="btn-scan" onclick="app.scanForEdit()"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg><span>Escanear producto</span></button>
+            </div>
             <div class="form-actions">
                 <button type="button" class="btn-secondary" onclick="app.closeSheets()">Cancelar</button>
                 <button type="submit" class="btn-primary">Guardar</button>
             </div>
+        </form>
+    </div>
+
+    <!-- Escáner de códigos de barras -->
+    <div id="scanner" class="scanner" role="dialog" aria-modal="true" aria-labelledby="scanner-title" hidden>
+        <div class="scanner-top">
+            <h3 id="scanner-title">Escanear producto</h3>
+            <button type="button" class="scanner-close" aria-label="Cerrar escáner" onclick="app.closeScanner(null)">
+                <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+        <div class="scanner-view">
+            <video id="scanner-video" playsinline muted></video>
+            <div class="scanner-guide" aria-hidden="true"></div>
+        </div>
+        <p class="scanner-status" id="scanner-status" aria-live="polite"></p>
+        <form class="scanner-manual" onsubmit="app.scanManual(event)">
+            <label for="scanner-code" class="sr-only">Número del código de barras</label>
+            <input type="text" id="scanner-code" inputmode="numeric" autocomplete="off" placeholder="…o escribe el número">
+            <button type="submit">Usar</button>
         </form>
     </div>
 
