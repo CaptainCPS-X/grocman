@@ -41,10 +41,19 @@ BASE="sftp://$HOST/~/jezerart.com/compra"
 - **Subir código:** `curl -sS --user "$USER:$PASS" -T src/app.js "$BASE/app.js"`
 
 ### Reglas
-- Subir SOLO archivos de código: `index.php`, `api.php`, `session.php`,
-  `app.js`, `style.css`.
+- Subir SOLO archivos de código: `index.php`, `api.php`, `config.php`,
+  `session.php`, `app.js`, `style.css`. Orden: primero `config.php` y
+  `session.php` (los demás los requieren), al final `app.js`.
 - **NUNCA** subir/sobrescribir `data/items.json` (datos reales) ni `auth.php`.
 - La DB vive en el servidor en `data/items.json` (movida ahí desde la raíz el
-  2026-07-17). `data/.htaccess` niega el acceso web directo.
-- Verificar tras subir: descargar el archivo y `diff` contra `src/`.
-- El cache-buster (`?v=<?php echo time(); ?>`) evita tener que limpiar caché.
+  2026-07-17). `data/.htaccess` niega el acceso web directo y **debe existir**:
+  tras cada despliegue comprobar que
+  `curl -s -o /dev/null -w "%{http_code}\n" https://jezerart.com/compra/data/items.json`
+  responda **403**.
+- En `data/` la app crea sola (NO tocar): `items.lock` (bloqueo de escritura),
+  `backups/` (copia diaria, 30 días), `sessions/` (sesiones de login) y
+  `login_attempts.json` (intentos fallidos por IP).
+- Antes de subir: `node tests/smoke.mjs` (prueba de humo local, no toca datos).
+- Verificar tras subir: descargar el archivo y `cmp` contra `src/`.
+- El cache-buster (`?v=<filemtime>`) hace que el navegador tome el CSS/JS
+  nuevo en cuanto cambia el archivo en el servidor.

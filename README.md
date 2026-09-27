@@ -21,14 +21,16 @@ carrito) → `stocked` (en casa).
 | Archivo | Rol |
 |---|---|
 | `src/index.php` | Login (sesión PHP) y renderizado de la SPA. |
-| `src/session.php` | Sesión propia (`GROCMANSESS`, ruta `/compra/`), compartida por `index.php` y `api.php`. |
+| `src/config.php` | Categorías, estados y límites (sesión, login). |
+| `src/session.php` | Sesión propia (`GROCMANSESS`, ruta `/compra/`, guardada en `data/sessions/`), caducidad tras 7 días sin uso y límite de intentos de login. |
 | `src/auth.php` | Hash bcrypt de la contraseña. **No versionado.** |
-| `src/api.php` | API JSON: `GET` lee, `POST` guarda. Versionado optimista con `409 Conflict`. |
-| `src/app.js` | Lógica de UI: lista, inventario, carrito, totales, CRUD. |
+| `src/api.php` | API JSON: `GET` lee, `POST` guarda (solo `application/json`, artículos validados). Versionado optimista con `409 Conflict`; escritura atómica con bloqueo y backup diario. |
+| `src/app.js` | Lógica de UI: lista, inventario, carrito, totales, CRUD. Guardado en cola con reintento automático ante conflictos; poll de 10 s (pausado en segundo plano). |
 | `src/style.css` | Estilos. |
 | `src/data/` | Directorio de la base de datos, separado del código. |
 | `src/data/items.json` | "Base de datos" (artículos). **No versionado.** |
 | `src/data/.htaccess` | Bloquea el acceso web directo a la base de datos. |
+| `tests/smoke.mjs` | Prueba de humo de la API y el login: `node tests/smoke.mjs`. |
 
 > La base de datos vive en `src/data/` para que al subir el código al servidor
 > puedas sobreescribir los archivos de `src/` sin tocar `src/data/`.
