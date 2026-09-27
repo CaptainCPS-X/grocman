@@ -7,26 +7,35 @@ if (file_exists(__DIR__ . '/auth.php')) {
     require_once __DIR__ . '/auth.php';
 }
 
-// Login
+// Login (con límite de intentos por IP)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
-    if (isset($stored_hash) && password_verify($_POST['password'], $stored_hash)) {
+    $wait = loginLockRemaining();
+    if ($wait > 0) {
+        $error = 'Demasiados intentos fallidos. Espera ' . ceil($wait / 60) . ' min.';
+    } elseif (isset($stored_hash) && password_verify($_POST['password'], $stored_hash)) {
+        loginSucceeded();
         loginSession();
         header('Location: ' . $_SERVER['SCRIPT_NAME']);
         exit();
     } else {
+        loginFailed();
+        sleep(1); // frena los intentos automáticos
         $error = "Contraseña incorrecta";
     }
 }
 
-// Logout
-if (isset($_GET['logout'])) {
+// Logout (por POST: con GET cualquier página podía cerrar la sesión con un <img>)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout'])) {
     logoutSession();
     header('Location: ' . $_SERVER['SCRIPT_NAME']);
     exit();
 }
 
-// Categorías (única fuente de verdad para los <select>)
-$CATS = ['Proteínas', 'Lácteos/Huevos', 'Frutas/Verduras', 'Panadería', 'Bebidas', 'Limpieza', 'Despensa', 'Higiene', 'Otros'];
+// Cache-buster por fecha de modificación: el navegador reutiliza su caché
+// hasta que el archivo cambia en el servidor.
+function asset($file) { return $file . '?v=' . filemtime(__DIR__ . '/' . $file); }
+
+// Opciones de categoría para los <select> (las categorías viven en config.php)
 function catOptions($cats) {
     $out = '';
     foreach ($cats as $c) {
@@ -67,7 +76,7 @@ if (!isAuthenticated()) {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Entrar | Gestor del Hogar</title>
-        <link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
+        <link rel="stylesheet" href="<?php echo asset('style.css'); ?>">
     </head>
     <body>
         <canvas id="bg-canvas" aria-hidden="true"></canvas>
@@ -96,9 +105,9 @@ if (!isAuthenticated()) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Gestor del Hogar</title>
-    <link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
+    <link rel="stylesheet" href="<?php echo asset('style.css'); ?>">
 </head>
 <body>
     <canvas id="bg-canvas" aria-hidden="true"></canvas>
@@ -106,9 +115,11 @@ if (!isAuthenticated()) {
     <div class="app-container">
         <header class="app-topbar">
             <h1>Gestor del Hogar</h1>
-            <a href="?logout" class="topbar-logout" title="Salir" aria-label="Salir">
-                <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-            </a>
+            <form method="POST" class="topbar-logout-form">
+                <button type="submit" name="logout" value="1" class="topbar-logout" title="Salir" aria-label="Salir">
+                    <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                </button>
+            </form>
         </header>
 
         <div id="view-shopping" class="view">
@@ -153,9 +164,9 @@ if (!isAuthenticated()) {
     <div id="sheet-backdrop" class="sheet-backdrop" onclick="app.closeSheets()"></div>
 
     <!-- Sheet: Agregar -->
-    <div id="add-sheet" class="sheet">
+    <div id="add-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="add-sheet-title">
         <div class="sheet-handle"></div>
-        <h3 class="sheet-title">Agregar artículo</h3>
+        <h3 class="sheet-title" id="add-sheet-title">Agregar artículo</h3>
         <form class="form" onsubmit="app.addItem(event)">
             <div class="field">
                 <label for="new-name">Nombre</label>
@@ -163,7 +174,7 @@ if (!isAuthenticated()) {
             </div>
             <div class="field">
                 <label for="new-cat">Categoría</label>
-                <select id="new-cat"><?php echo catOptions($CATS); ?></select>
+                <select id="new-cat"><?php echo catOptions(CATS); ?></select>
             </div>
             <div class="field">
                 <label for="new-price">Precio <span class="opt">(opcional)</span></label>
@@ -178,9 +189,9 @@ if (!isAuthenticated()) {
     </div>
 
     <!-- Sheet: Editar -->
-    <div id="edit-sheet" class="sheet">
+    <div id="edit-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="edit-sheet-title">
         <div class="sheet-handle"></div>
-        <h3 class="sheet-title">Editar artículo</h3>
+        <h3 class="sheet-title" id="edit-sheet-title">Editar artículo</h3>
         <form class="form" onsubmit="app.saveEdit(event)">
             <input type="hidden" id="edit-original-name">
             <div class="field">
@@ -189,7 +200,7 @@ if (!isAuthenticated()) {
             </div>
             <div class="field">
                 <label for="edit-cat">Categoría</label>
-                <select id="edit-cat"><?php echo catOptions($CATS); ?></select>
+                <select id="edit-cat"><?php echo catOptions(CATS); ?></select>
             </div>
             <div class="field">
                 <label for="edit-price">Precio <span class="opt">(opcional)</span></label>
@@ -206,9 +217,9 @@ if (!isAuthenticated()) {
         </form>
     </div>
 
-    <div id="toast" class="toast">Guardado</div>
+    <div id="toast" class="toast" role="status" aria-live="polite">Guardado</div>
 
     <script><?php echo $WAVES_JS; ?></script>
-    <script src="app.js?v=<?php echo time(); ?>"></script>
+    <script src="<?php echo asset('app.js'); ?>"></script>
 </body>
 </html>

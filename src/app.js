@@ -27,51 +27,111 @@ const app = {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;'),
 
+    // --- DATOS Y SINCRONIZACIÓN ---
+    // Cada toque se aplica al instante en pantalla y se guarda en cola: los
+    // guardados van de uno en uno (dos toques rápidos no chocan entre sí).
+    // Si otro dispositivo guardó antes (409), los cambios pendientes se vuelven
+    // a aplicar sobre la lista más reciente y se reintenta. Por eso cada cambio
+    // es una función de la lista que expresa la intención ("poner Leche en el
+    // carrito"), no un "alternar" que al reaplicarse desharía el cambio del otro.
+    pending: [],       // cambios locales aún no confirmados por el servidor
+    flushing: null,    // promesa del guardado en curso
+    changeSeq: 0,      // sube con cada cambio local: descarta respuestas de poll obsoletas
+    POLL_MS: 10000,
+
     init: async () => {
-        document.getElementById('shopping-list-render').addEventListener('click', app.onShoppingClick);
-        document.getElementById('inventory-list-render').addEventListener('click', app.onInventoryClick);
-        await app.fetchData();
-        setInterval(app.fetchData, 10000);
+        const shopping = document.getElementById('shopping-list-render');
+        const inventory = document.getElementById('inventory-list-render');
+        shopping.addEventListener('click', app.onShoppingClick);
+        inventory.addEventListener('click', app.onInventoryClick);
+        // Enter / Espacio en los elementos con role="button" (filas editables)
+        [shopping, inventory].forEach(el => el.addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) {
+                e.preventDefault();
+                e.target.click();
+            }
+        }));
+        document.addEventListener('keydown', app.onSheetKeydown);
+        await app.fetchData({ poll: false });
+        // El poll se pausa con la pestaña en segundo plano y se pone al día al volver.
+        setInterval(() => { if (!document.hidden) app.fetchData(); }, app.POLL_MS);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) app.fetchData(); });
     },
 
-    fetchData: async () => {
+    // Lee la lista del servidor. poll = consulta automática (no cuenta como uso
+    // para la caducidad de la sesión). Se ignora si hay cambios propios en vuelo
+    // o si llegó tarde (hubo un cambio local mientras se pedía).
+    fetchData: async ({ poll = true } = {}) => {
+        if (app.pending.length || app.flushing) return;
+        const seq = app.changeSeq;
         try {
-            const res = await fetch('api.php?t=' + Date.now());
+            const res = await fetch(`api.php?${poll ? 'poll=1&' : ''}t=${Date.now()}`);
+            if (res.status === 401) { location.reload(); return; }
+            if (!res.ok) return;
             const json = await res.json();
-            if (JSON.stringify(app.data.items) !== JSON.stringify(json.items)) {
-                app.data = json;
-                app.render();
-            } else {
-                app.data.version = json.version;
-            }
+            if (!Array.isArray(json.items)) return;
+            if (seq !== app.changeSeq || app.pending.length || app.flushing) return;
+            const changed = JSON.stringify(app.data.items) !== JSON.stringify(json.items);
+            app.data = { version: json.version, items: json.items };
+            if (changed) app.render();
         } catch (e) { console.error("Error conexión:", e); }
     },
 
-    saveData: async (newItems) => {
-        const oldItems = app.data.items;
-        app.data.items = newItems;
-        app.render(); // Render optimista
+    // Aplica un cambio (función items → items) y lo guarda. Devuelve true si se guardó.
+    change: (mutate) => {
+        app.changeSeq++;
+        app.pending.push(mutate);
+        app.data.items = mutate(app.data.items);
+        app.render();
+        if (!app.flushing) app.flushing = app.flush().finally(() => { app.flushing = null; });
+        return app.flushing;
+    },
 
-        try {
-            const res = await fetch('api.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ version: app.data.version, items: newItems })
-            });
-            if (res.status === 409) {
-                app.showToast('⚠️ Lista modificada en otro lado. Recargando…');
-                await app.fetchData();
-            } else if (res.status === 401) {
-                location.reload();
-            } else {
-                const json = await res.json();
-                app.data.version = json.newVersion;
+    flush: async () => {
+        let conflicts = 0;
+        while (app.pending.length) {
+            const sent = app.pending.length;
+            let res, json;
+            try {
+                res = await fetch('api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ version: app.data.version, items: app.data.items })
+                });
+                json = await res.json().catch(() => ({}));
+            } catch (e) {
+                return app.saveFailed('Sin conexión: no se guardó el cambio');
             }
-        } catch (e) {
-            app.showToast('Error al guardar');
-            app.data.items = oldItems;
-            app.render();
+            if (res.status === 401) { location.reload(); return false; }
+            if (res.status === 409 && json.latest && conflicts < 3) {
+                conflicts++;
+                app.data = {
+                    version: json.latest.version,
+                    items: app.pending.reduce((items, m) => m(items), json.latest.items)
+                };
+                app.render();
+                continue;
+            }
+            if (!res.ok) return app.saveFailed(json.error || 'Error al guardar');
+            app.data.version = json.newVersion;
+            app.pending.splice(0, sent);
+            // Sin más cambios pendientes: adoptar la lista tal como la guardó el servidor.
+            if (!app.pending.length && Array.isArray(json.items)
+                && JSON.stringify(json.items) !== JSON.stringify(app.data.items)) {
+                app.data.items = json.items;
+                app.render();
+            }
         }
+        return true;
+    },
+
+    // El guardado falló: se descartan los cambios pendientes y se vuelve a
+    // cargar la lista real (en cuanto termine este guardado).
+    saveFailed: (msg) => {
+        app.pending = [];
+        app.showToast(msg);
+        setTimeout(() => app.fetchData({ poll: false }), 0);
+        return false;
     },
 
     render: () => {
@@ -111,11 +171,10 @@ const app = {
         document.getElementById('total-bar').style.display = onShopping ? 'flex' : 'none';
     },
 
-    checkout: () => {
+    checkout: async () => {
         if (!confirm("¿Ya pagaste? Los artículos del carrito pasan al inventario.")) return;
-        const newItems = app.data.items.map(i => i.status === 'in_cart' ? { ...i, status: 'stocked' } : i);
-        app.saveData(newItems);
-        app.showToast("¡Compra finalizada!");
+        const ok = await app.change(items => items.map(i => i.status === 'in_cart' ? { ...i, status: 'stocked' } : i));
+        if (ok) app.showToast("¡Compra finalizada!");
     },
 
     // --- LISTA DE COMPRA ---
@@ -143,14 +202,15 @@ const app = {
 
             items.forEach(item => {
                 const isInCart = item.status === 'in_cart';
+                const name = app.esc(item.name);
                 const price = item.price > 0 ? `<span class="item-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
                 html += `
-                <div class="item-row ${isInCart ? 'in-cart' : ''}" data-name="${app.esc(item.name)}">
-                    <div class="item-main">
-                        <div class="item-name">${app.esc(item.name)}${price}</div>
+                <div class="item-row ${isInCart ? 'in-cart' : ''}" data-name="${name}">
+                    <div class="item-main" role="button" tabindex="0" aria-label="Editar ${name}">
+                        <div class="item-name">${name}${price}</div>
                         ${item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : ''}
                     </div>
-                    <div class="check-circle ${isInCart ? 'in-cart' : ''}">${app.svgIcon('check')}</div>
+                    <button type="button" class="check-circle ${isInCart ? 'in-cart' : ''}" aria-pressed="${isInCart}" aria-label="${isInCart ? 'Sacar del carrito' : 'Poner en el carrito'}: ${name}">${app.svgIcon('check')}</button>
                 </div>`;
             });
             html += `</div>`;
@@ -163,7 +223,7 @@ const app = {
         if (!row) return;
         const name = row.dataset.name;
         if (e.target.closest('.check-circle')) app.toggleShoppingStatus(name);
-        else app.openEditSheet(name);
+        else if (e.target.closest('.item-main')) app.openEditSheet(name);
     },
 
     // --- INVENTARIO ---
@@ -183,17 +243,18 @@ const app = {
         let html = '';
         sorted.forEach(item => {
             const isNeeded = (item.status === 'needed' || item.status === 'in_cart');
+            const name = app.esc(item.name);
             const price = item.price > 0 ? `<span class="inv-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
             html += `
-            <div class="inv-item ${item.status === 'stocked' ? 'stocked' : 'needed'}" data-name="${app.esc(item.name)}">
+            <div class="inv-item ${item.status === 'stocked' ? 'stocked' : 'needed'}" data-name="${name}">
                 <span class="inv-status"></span>
-                <div class="inv-main">
-                    <div class="inv-name">${app.esc(item.name)}${price}</div>
+                <div class="inv-main" role="button" tabindex="0" aria-label="Editar ${name}">
+                    <div class="inv-name">${name}${price}</div>
                     <div class="inv-cat">${app.esc(item.category)}</div>
                 </div>
                 <div class="inv-actions">
-                    <button class="inv-toggle ${isNeeded ? 'tengo' : 'pedir'}">${isNeeded ? 'Ya tengo' : '+ Pedir'}</button>
-                    <button class="inv-del" title="Eliminar" aria-label="Eliminar">${app.svgIcon('trash')}</button>
+                    <button type="button" class="inv-toggle ${isNeeded ? 'tengo' : 'pedir'}" aria-label="${isNeeded ? 'Ya tengo' : 'Pedir'}: ${name}">${isNeeded ? 'Ya tengo' : '+ Pedir'}</button>
+                    <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
                 </div>
             </div>`;
         });
@@ -209,28 +270,30 @@ const app = {
         else if (e.target.closest('.inv-main')) app.openEditSheet(name);
     },
 
+    // Cambia el estado de un artículo a un valor concreto (intención explícita).
+    setStatus: (name, status) =>
+        app.change(items => items.map(i => i.name === name ? { ...i, status } : i)),
+
     // ACCIÓN: en la Lista (Necesito <-> En Carrito)
     toggleShoppingStatus: (name) => {
-        const newItems = app.data.items.map(i =>
-            i.name === name ? { ...i, status: (i.status === 'needed' ? 'in_cart' : 'needed') } : i);
-        app.saveData(newItems);
+        const item = app.data.items.find(i => i.name === name);
+        if (item) app.setStatus(name, item.status === 'in_cart' ? 'needed' : 'in_cart');
     },
 
     // ACCIÓN: en Inventario (Stocked <-> Needed)
     toggleInventoryStatus: (name) => {
-        const newItems = app.data.items.map(i => {
-            if (i.name !== name) return i;
-            const isActive = (i.status === 'needed' || i.status === 'in_cart');
-            return { ...i, status: (isActive ? 'stocked' : 'needed') };
-        });
-        app.saveData(newItems);
+        const item = app.data.items.find(i => i.name === name);
+        if (!item) return;
+        const isActive = (item.status === 'needed' || item.status === 'in_cart');
+        app.setStatus(name, isActive ? 'stocked' : 'needed');
     },
 
     addItem: (e) => {
         e.preventDefault();
         const name = document.getElementById('new-name').value.trim();
         if (!name) return;
-        if (app.data.items.find(i => i.name.toLowerCase() === name.toLowerCase())) {
+        const exists = (items) => items.some(i => i.name.toLowerCase() === name.toLowerCase());
+        if (exists(app.data.items)) {
             app.showToast('Ya existe ese artículo');
             return;
         }
@@ -244,14 +307,14 @@ const app = {
         document.getElementById('new-name').value = '';
         document.getElementById('new-note').value = '';
         document.getElementById('new-price').value = '';
-        app.saveData([...app.data.items, newItem]);
+        app.change(items => exists(items) ? items : [...items, newItem]);
         app.closeSheets();
         app.showToast('Agregado a la lista');
     },
 
     deleteItem: (name) => {
         if (!confirm(`¿Eliminar "${name}"?`)) return;
-        app.saveData(app.data.items.filter(i => i.name !== name));
+        app.change(items => items.filter(i => i.name !== name));
     },
 
     // --- EDICIÓN ---
@@ -270,40 +333,59 @@ const app = {
         e.preventDefault();
         const originalName = document.getElementById('edit-original-name').value;
         const newName = document.getElementById('edit-name').value.trim();
-        if (newName.toLowerCase() !== originalName.toLowerCase() &&
-            app.data.items.find(i => i.name.toLowerCase() === newName.toLowerCase())) {
+        if (!newName) return;
+        const clashes = (items) => newName.toLowerCase() !== originalName.toLowerCase() &&
+            items.some(i => i.name.toLowerCase() === newName.toLowerCase());
+        if (clashes(app.data.items)) {
             app.showToast('Ya existe otro con ese nombre');
             return;
         }
-        const newItems = app.data.items.map(item => {
-            if (item.name !== originalName) return item;
-            return {
-                ...item,
-                name: newName,
-                category: document.getElementById('edit-cat').value,
-                note: document.getElementById('edit-note').value.trim(),
-                price: parseFloat(document.getElementById('edit-price').value) || 0
-            };
-        });
-        app.saveData(newItems);
+        const fields = {
+            name: newName,
+            category: document.getElementById('edit-cat').value,
+            note: document.getElementById('edit-note').value.trim(),
+            price: parseFloat(document.getElementById('edit-price').value) || 0
+        };
+        app.change(items => clashes(items) ? items
+            : items.map(item => item.name === originalName ? { ...item, ...fields } : item));
         app.closeSheets();
     },
 
     // --- SHEETS ---
+    // Accesibles: foco al primer campo, Tab atrapado dentro, Escape para
+    // cerrar y el foco vuelve al elemento que abrió la hoja.
+    sheetOpener: null,
     openSheet: (id) => {
+        const sheet = document.getElementById(id);
+        app.sheetOpener = document.activeElement;
         document.getElementById('sheet-backdrop').classList.add('open');
-        document.getElementById(id).classList.add('open');
+        sheet.classList.add('open');
+        setTimeout(() => { const f = sheet.querySelector('input:not([type=hidden]), select'); if (f) f.focus(); }, 320);
     },
     openAddSheet: () => {
         document.getElementById('new-name').value = '';
         document.getElementById('new-price').value = '';
         document.getElementById('new-note').value = '';
         app.openSheet('add-sheet');
-        setTimeout(() => document.getElementById('new-name').focus(), 320);
     },
     closeSheets: () => {
+        const wasOpen = document.querySelector('.sheet.open');
         document.getElementById('sheet-backdrop').classList.remove('open');
         document.querySelectorAll('.sheet').forEach(s => s.classList.remove('open'));
+        if (wasOpen && app.sheetOpener && document.contains(app.sheetOpener)) app.sheetOpener.focus({ preventScroll: true });
+        app.sheetOpener = null;
+    },
+    onSheetKeydown: (e) => {
+        const open = document.querySelector('.sheet.open');
+        if (!open) return;
+        if (e.key === 'Escape') { e.preventDefault(); app.closeSheets(); return; }
+        if (e.key !== 'Tab') return;
+        const f = [...open.querySelectorAll('button, input:not([type=hidden]), select, textarea')].filter(el => !el.disabled && el.offsetParent !== null);
+        if (!f.length) return;
+        const first = f[0], last = f[f.length - 1];
+        if (!open.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+        else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     },
 
     // --- NAVEGACIÓN ---

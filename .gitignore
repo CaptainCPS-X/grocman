@@ -2,6 +2,11 @@
 # Base de datos real (lista + inventario del hogar)
 src/data/items.json
 src/data/items.json.bkp
+src/data/items.json.tmp
+src/data/items.lock
+src/data/backups/
+src/data/sessions/
+src/data/login_attempts.json
 *.bkp
 
 # Credencial: hash de la contraseña de acceso

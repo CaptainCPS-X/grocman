@@ -41,8 +41,10 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.5);
 }
 .app-topbar h1 { margin: 0; font-size: 19px; font-weight: 800; color: var(--primary-dark); letter-spacing: 0.2px; }
+.topbar-logout-form { margin: 0; }
 .topbar-logout {
     width: 40px; height: 40px; border-radius: 11px;
+    border: none; padding: 0; cursor: pointer; font: inherit;
     display: inline-flex; align-items: center; justify-content: center;
     color: #868e96; background: rgba(0, 0, 0, 0.04); text-decoration: none;
     transition: background-color 0.15s, color 0.15s;
@@ -86,6 +88,7 @@ body {
 
 .check-circle {
     width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    padding: 0; margin: 0; font: inherit; -webkit-appearance: none; appearance: none;
     border: 2px solid #ced4da; background: rgba(255, 255, 255, 0.6);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; color: #ced4da; transition: all 0.2s;
@@ -301,3 +304,15 @@ body {
 .login-box button:hover { background: var(--primary-dark); }
 .login-box button:active { transform: scale(0.99); }
 .login-box .error { color: var(--danger); margin: 0 0 14px; font-weight: 600; font-size: 14px; }
+
+
+/* --- Foco visible con teclado (filas editables, checks, botones) --- */
+.item-main:focus-visible, .inv-main:focus-visible,
+.check-circle:focus-visible, .inv-toggle:focus-visible, .inv-del:focus-visible,
+.topbar-logout:focus-visible, .bn-item:focus-visible, .btn-checkout:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 10px;
+}
+.check-circle:focus-visible { border-radius: 50%; }
+.inv-main { cursor: pointer; }
