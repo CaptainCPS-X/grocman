@@ -123,6 +123,26 @@ try {
     await post({ version: v(), items: [item({ name: 'Leche', barcodes: [] })] });
     check('lista de productos vacía no se guarda como campo', !('barcodes' in readData().items[0]));
 
+    console.log('Imágenes de los artículos');
+    const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const ICONS = path.join(DATA_DIR, 'icons');
+    const up = await post({ iconUpload: PNG_1PX });
+    const iconId = up.json?.icon;
+    check('subir PNG → 200 con id', up.status === 200 && /^[a-f0-9]{16}$/.test(iconId || ''), up.text);
+    const img = await fetch(`${BASE}/api.php?icon=${iconId}`, { headers: { Cookie: cookieHeader() } });
+    check('servir imagen → 200 image/png + nosniff', img.status === 200 && img.headers.get('content-type') === 'image/png' && img.headers.get('x-content-type-options') === 'nosniff');
+    check('imagen sin sesión → 401', (await fetch(`${BASE}/api.php?icon=${iconId}`)).status === 401);
+    check('id malicioso (../) → 400', (await request(`/api.php?icon=${encodeURIComponent('../items')}`)).status === 400);
+    check('texto disfrazado de PNG → 400', (await post({ iconUpload: 'data:image/png;base64,' + Buffer.from('<script>').toString('base64') })).status === 400);
+    check('SVG → 400', (await post({ iconUpload: 'data:image/svg+xml;base64,' + Buffer.from('<svg/>').toString('base64') })).status === 400);
+    await post({ version: v(), items: [item({ name: 'Leche', icon: iconId }), item({ name: 'Pan', icon: 'ffffffffffffffff' })] });
+    check('el artículo guarda su imagen; un id inexistente se descarta', readData().items[0].icon === iconId && !('icon' in readData().items[1]));
+    const orphan = (await post({ iconUpload: PNG_1PX })).json.icon;
+    const old = new Date(Date.now() - 2 * 3600 * 1000);
+    for (const idx of [iconId, orphan]) fs.utimesSync(path.join(ICONS, `${idx}.png`), old, old);
+    await post({ version: v(), items: [item({ name: 'Leche', icon: iconId })] });
+    check('al guardar se borran las imágenes huérfanas (>1h) y se conserva la usada', !fs.existsSync(path.join(ICONS, `${orphan}.png`)) && fs.existsSync(path.join(ICONS, `${iconId}.png`)));
+
     console.log('Guardados simultáneos (misma versión)');
     const base = v();
     const results = await Promise.all([1, 2, 3, 4].map(n => post({ version: base, items: [item({ name: `Cosa ${n}` })] })));

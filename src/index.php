@@ -164,7 +164,7 @@ if (!isAuthenticated()) {
     <div id="sheet-backdrop" class="sheet-backdrop" onclick="app.closeSheets()"></div>
 
     <!-- Sheet: Agregar -->
-    <div id="add-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="add-sheet-title">
+    <div id="add-sheet" class="sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="add-sheet-title">
         <div class="sheet-handle"></div>
         <h3 class="sheet-title" id="add-sheet-title">Agregar artículo</h3>
         <form class="form" onsubmit="app.addItem(event)">
@@ -172,6 +172,17 @@ if (!isAuthenticated()) {
                 <span class="field-label">Producto <span class="opt">(opcional)</span></span>
                 <div class="barcode-list" id="new-barcodes"></div>
                 <button type="button" class="btn-scan" onclick="app.scanForAdd()"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg><span>Escanear producto</span></button>
+            </div>
+            <div class="field">
+                <span class="field-label" id="new-icon-label">Imagen <span class="opt">(opcional)</span></span>
+                <div class="icon-picker" id="new-icon-picker" role="group" aria-labelledby="new-icon-label">
+                    <div class="ip-preview" aria-hidden="true"></div>
+                    <div class="ip-actions">
+                        <label class="ip-upload"><input type="file" accept="image/*"><span class="ip-upload-text">Subir imagen</span></label>
+                        <button type="button" class="ip-remove" hidden>Quitar</button>
+                    </div>
+                    <span class="ip-status" aria-live="polite"></span>
+                </div>
             </div>
             <div class="field">
                 <label for="new-name">Nombre</label>
@@ -194,7 +205,7 @@ if (!isAuthenticated()) {
     </div>
 
     <!-- Sheet: Editar -->
-    <div id="edit-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="edit-sheet-title">
+    <div id="edit-sheet" class="sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="edit-sheet-title">
         <div class="sheet-handle"></div>
         <h3 class="sheet-title" id="edit-sheet-title">Editar artículo</h3>
         <form class="form" onsubmit="app.saveEdit(event)">
@@ -214,6 +225,17 @@ if (!isAuthenticated()) {
             <div class="field">
                 <label for="edit-note">Nota <span class="opt">(opcional)</span></label>
                 <input type="text" id="edit-note" placeholder="Marca, tamaño…">
+            </div>
+            <div class="field">
+                <span class="field-label" id="edit-icon-label">Imagen <span class="opt">(opcional)</span></span>
+                <div class="icon-picker" id="edit-icon-picker" role="group" aria-labelledby="edit-icon-label">
+                    <div class="ip-preview" aria-hidden="true"></div>
+                    <div class="ip-actions">
+                        <label class="ip-upload"><input type="file" accept="image/*"><span class="ip-upload-text">Subir imagen</span></label>
+                        <button type="button" class="ip-remove" hidden>Quitar</button>
+                    </div>
+                    <span class="ip-status" aria-live="polite"></span>
+                </div>
             </div>
             <div class="field">
                 <span class="field-label">Productos <span class="opt">(códigos de barras)</span></span>

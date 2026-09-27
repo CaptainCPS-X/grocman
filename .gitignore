@@ -6,6 +6,7 @@ src/data/items.json.tmp
 src/data/items.lock
 src/data/backups/
 src/data/sessions/
+src/data/icons/
 src/data/login_attempts.json
 *.bkp
 

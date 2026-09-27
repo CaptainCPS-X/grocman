@@ -32,6 +32,16 @@ código de barras (p. ej. "Leche" → galón Horizon, galón Great Value). En
   Beauty Facts y Open Products Facts) directamente desde el navegador; solo se
   envía el número del código. En *Agregar* rellena el nombre y la categoría.
 
+### Imágenes de los artículos
+
+Cada artículo puede tener una imagen (`[imagen] Leche` en la lista y el
+inventario); sin imagen se muestra el icono de su categoría. Se sube desde
+*Agregar* / *Editar* (galería o cámara) o, al escanear un producto, se usa su
+foto de Open Food Facts si el artículo aún no tiene imagen. El teléfono la
+ajusta a 128×128 y la sube como PNG a `data/icons/<id>.png`; se sirve solo con
+sesión (`api.php?icon=<id>`). Las imágenes que ningún artículo usa se borran
+solas tras 1 h. No entran en el backup diario de `items.json`.
+
 ## Estructura
 
 | Archivo | Rol |

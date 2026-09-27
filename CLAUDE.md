@@ -52,7 +52,8 @@ BASE="sftp://$HOST/~/jezerart.com/compra"
   `curl -s -o /dev/null -w "%{http_code}\n" https://jezerart.com/compra/data/items.json`
   responda **403**.
 - En `data/` la app crea sola (NO tocar): `items.lock` (bloqueo de escritura),
-  `backups/` (copia diaria, 30 días), `sessions/` (sesiones de login) y
+  `backups/` (copia diaria, 30 días), `sessions/` (sesiones de login),
+  `icons/` (imágenes de los artículos) y
   `login_attempts.json` (intentos fallidos por IP).
 - Antes de subir: `node tests/smoke.mjs` (prueba de humo local, no toca datos).
 - Verificar tras subir: descargar el archivo y `cmp` contra `src/`.

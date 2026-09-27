@@ -5,6 +5,7 @@ const app = {
     ICONS: {
         check: '<polyline points="20 6 9 17 4 12"/>',
         cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+        image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
         flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
         barcode: '<path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -56,6 +57,7 @@ const app = {
         }));
         document.addEventListener('keydown', app.onSheetKeydown);
         document.querySelector('.scanner-view').addEventListener('click', app.focusAt);
+        app.iconPickers = { new: app.makeIconPicker('new'), edit: app.makeIconPicker('edit') };
         ['add', 'edit'].forEach(which => document.getElementById(`${which === 'add' ? 'new' : 'edit'}-barcodes`).addEventListener('click', (e) => {
             const btn = e.target.closest('.bc-remove');
             if (!btn) return;
@@ -217,8 +219,11 @@ const app = {
                 html += `
                 <div class="item-row ${isInCart ? 'in-cart' : ''}" data-name="${name}">
                     <div class="item-main" role="button" tabindex="0" aria-label="Editar ${name}">
-                        <div class="item-name">${name}${price}</div>
-                        ${item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : ''}
+                        ${app.thumbHTML(item)}
+                        <div class="item-text">
+                            <div class="item-name">${name}${price}</div>
+                            ${item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : ''}
+                        </div>
                     </div>
                     <button type="button" class="check-circle ${isInCart ? 'in-cart' : ''}" aria-pressed="${isInCart}" aria-label="${isInCart ? 'Sacar del carrito' : 'Poner en el carrito'}: ${name}">${app.svgIcon('check')}</button>
                 </div>`;
@@ -259,8 +264,11 @@ const app = {
             <div class="inv-item ${item.status === 'stocked' ? 'stocked' : 'needed'}" data-name="${name}">
                 <span class="inv-status"></span>
                 <div class="inv-main" role="button" tabindex="0" aria-label="Editar ${name}">
+                    ${app.thumbHTML(item)}
+                    <div class="inv-text">
                     <div class="inv-name">${name}${price}</div>
                     <div class="inv-cat">${app.esc(item.category)}${(item.barcodes || []).length ? ` · ${item.barcodes.length} producto${item.barcodes.length === 1 ? '' : 's'}` : ''}</div>
+                    </div>
                 </div>
                 <div class="inv-actions">
                     <button type="button" class="inv-toggle ${isNeeded ? 'tengo' : 'pedir'}" aria-label="${isNeeded ? 'Ya tengo' : 'Pedir'}: ${name}">${isNeeded ? 'Ya tengo' : '+ Pedir'}</button>
@@ -300,6 +308,7 @@ const app = {
 
     addItem: (e) => {
         e.preventDefault();
+        if (app.pickerBusy(app.iconPickers.new)) return;
         const name = document.getElementById('new-name').value.trim();
         if (!name) return;
         const exists = (items) => items.some(i => i.name.toLowerCase() === name.toLowerCase());
@@ -316,12 +325,14 @@ const app = {
         };
         const barcodes = app.addBarcodes.map(({ code, label }) => ({ code, label }));
         if (barcodes.length) newItem.barcodes = barcodes;
+        if (app.iconPickers.new.get()) newItem.icon = app.iconPickers.new.get();
         const codes = new Set(barcodes.map(b => b.code));
         document.getElementById('new-name').value = '';
         document.getElementById('new-note').value = '';
         document.getElementById('new-price').value = '';
         app.addBarcodes = [];
         app.renderBarcodes('add');
+        app.iconPickers.new.set(null);
         app.change(items => exists(items) ? items : [...items.map(i => app.withoutCodes(i, codes)), newItem]);
         app.closeSheets();
         app.showToast('Agregado a la lista');
@@ -343,11 +354,14 @@ const app = {
         document.getElementById('edit-price').value = item.price || '';
         app.editBarcodes = (item.barcodes || []).map(b => ({ ...b }));
         app.renderBarcodes('edit');
-        app.openSheet('edit-sheet');
+        app.iconPickers.edit.set(item.icon);
+        // Sin enfocar ningún campo: en el teléfono el teclado taparía la hoja.
+        app.openSheet('edit-sheet', { focusField: false });
     },
 
     saveEdit: (e) => {
         e.preventDefault();
+        if (app.pickerBusy(app.iconPickers.edit)) return;
         const originalName = document.getElementById('edit-original-name').value;
         const newName = document.getElementById('edit-name').value.trim();
         if (!newName) return;
@@ -365,8 +379,10 @@ const app = {
             barcodes: app.editBarcodes.map(({ code, label }) => ({ code, label }))
         };
         const codes = new Set(fields.barcodes.map(b => b.code));
+        const icon = app.iconPickers.edit.get();
+        const edited = (item) => { const out = { ...item, ...fields }; if (icon) out.icon = icon; else delete out.icon; return out; };
         app.change(items => clashes(items) ? items
-            : items.map(item => item.name === originalName ? { ...item, ...fields } : app.withoutCodes(item, codes)));
+            : items.map(item => item.name === originalName ? edited(item) : app.withoutCodes(item, codes)));
         app.closeSheets();
     },
 
@@ -645,7 +661,7 @@ const app = {
             try {
                 const ctrl = new AbortController();
                 const timer = setTimeout(() => ctrl.abort(), 6000);
-                const res = await fetch(`https://${host}/api/v2/product/${code}.json?fields=product_name,product_name_es,product_name_en,brands,quantity,categories_tags`, { signal: ctrl.signal });
+                const res = await fetch(`https://${host}/api/v2/product/${code}.json?fields=product_name,product_name_es,product_name_en,brands,quantity,categories_tags,image_front_url,image_front_small_url`, { signal: ctrl.signal });
                 clearTimeout(timer);
                 if (!res.ok) continue; // 404: no está en esta base
                 const j = await res.json();
@@ -657,6 +673,7 @@ const app = {
                 return (app.productCache[code] = {
                     name, brand, quantity,
                     label: [brand, name, quantity].filter(Boolean).join(' · '),
+                    image: String(p.image_front_url || p.image_front_small_url || ''),
                     category: app.categoryFromTags(p.categories_tags || [], host)
                 });
             } catch (e) { failed = true; } // sin conexión o sin respuesta: probar la siguiente
@@ -718,6 +735,7 @@ const app = {
         entry.loading = false;
         entry.label = info ? info.label : '';
         app.renderBarcodes('edit');
+        app.useProductPhoto(app.iconPickers.edit, info);
     },
 
     // Agregar un artículo → escanear el producto: rellena nombre y categoría.
@@ -737,24 +755,119 @@ const app = {
             const nameEl = document.getElementById('new-name');
             if (!nameEl.value.trim() && info.name) nameEl.value = info.name;
             if (info.category) document.getElementById('new-cat').value = info.category;
+            app.useProductPhoto(app.iconPickers.new, info);
         } else {
             app.showToast('Producto no encontrado: escribe el nombre');
         }
         app.renderBarcodes('add');
     },
 
+    // --- IMÁGENES DE LOS ARTÍCULOS ---
+    // Se ajustan en el teléfono a 128×128 (completas, centradas, fondo
+    // transparente) y se suben como PNG; el artículo guarda solo el id que
+    // devuelve el servidor (data/icons/, visible solo con sesión).
+    ICON_SIZE: 128,
+    iconURL: (id) => `api.php?icon=${encodeURIComponent(id)}`,
+
+    // Miniatura de un artículo: su imagen o, si no tiene, el icono de su categoría.
+    thumbHTML: (item) => item.icon
+        ? `<span class="item-thumb has-img"><img src="${app.iconURL(item.icon)}" alt="" loading="lazy" decoding="async"></span>`
+        : `<span class="item-thumb" aria-hidden="true">${app.catIcon(item.category)}</span>`,
+
+    // src: archivo elegido (File) o URL de la foto de Open Food Facts (con CORS).
+    toIconPNG: (src) => new Promise((resolve, reject) => {
+        const isFile = src instanceof Blob;
+        if (isFile && !/^image\//.test(src.type)) { reject(new Error('Elige una imagen.')); return; }
+        if (isFile && src.size > 15e6) { reject(new Error('La imagen es demasiado grande (máx. 15 MB).')); return; }
+        const url = isFile ? URL.createObjectURL(src) : src;
+        const img = new Image();
+        if (!isFile) img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            if (isFile) URL.revokeObjectURL(url);
+            const S = app.ICON_SIZE, scale = Math.min(S / img.naturalWidth, S / img.naturalHeight);
+            const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = S; canvas.height = S;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+            try { resolve(canvas.toDataURL('image/png')); } catch (e) { reject(new Error('No se pudo usar esa imagen.')); }
+        };
+        img.onerror = () => { if (isFile) URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
+        img.src = url;
+    }),
+
+    // Selector de imagen de un formulario (prefix: 'new' | 'edit').
+    makeIconPicker: (prefix) => {
+        const root = document.getElementById(`${prefix}-icon-picker`);
+        const input = root.querySelector('input[type=file]');
+        const preview = root.querySelector('.ip-preview');
+        const uploadText = root.querySelector('.ip-upload-text');
+        const removeBtn = root.querySelector('.ip-remove');
+        const status = root.querySelector('.ip-status');
+        let value = null, busy = false, seq = 0;
+        const render = () => {
+            preview.innerHTML = value ? `<img src="${app.iconURL(value)}" alt="">` : app.svgIcon('image');
+            preview.classList.toggle('has-img', !!value);
+            uploadText.textContent = busy ? 'Subiendo…' : (value ? 'Cambiar imagen' : 'Subir imagen');
+            removeBtn.hidden = !value || busy;
+        };
+        // Sube una imagen; si mientras tanto se eligió otra o se quitó, se ignora.
+        const load = async (src, failMsg) => {
+            const my = ++seq;
+            busy = true; status.textContent = ''; render();
+            try {
+                const png = await app.toIconPNG(src);
+                const res = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iconUpload: png }) });
+                if (res.status === 401) { location.reload(); return; }
+                const json = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(json.error || failMsg);
+                if (my === seq) value = json.icon;
+            } catch (e) { if (my === seq) status.textContent = e.message || failMsg; }
+            if (my === seq) { busy = false; render(); }
+        };
+        input.addEventListener('change', () => {
+            const file = input.files[0];
+            input.value = '';
+            if (file) load(file, 'No se pudo subir la imagen.');
+        });
+        removeBtn.addEventListener('click', () => { seq++; busy = false; value = null; status.textContent = ''; render(); });
+        render();
+        return {
+            get: () => value,
+            busy: () => busy,
+            set: (v) => { seq++; busy = false; value = v || null; status.textContent = ''; render(); },
+            fromURL: (url) => load(url, 'No se pudo usar la foto del producto.'),
+        };
+    },
+    pickerBusy: (picker) => {
+        if (!picker.busy()) return false;
+        app.showToast('Espera a que termine de subir la imagen');
+        return true;
+    },
+    // Al escanear: si el artículo aún no tiene imagen, usar la foto del producto.
+    useProductPhoto: (picker, info) => {
+        if (info && info.image && !picker.get() && !picker.busy()) picker.fromURL(info.image);
+    },
+
     // --- SHEETS ---
     // Accesibles: foco al primer campo, Tab atrapado dentro, Escape para
     // cerrar y el foco vuelve al elemento que abrió la hoja.
     sheetOpener: null,
-    openSheet: (id) => {
+    // focusField: enfocar el primer campo (Agregar) o solo la hoja (Editar, para
+    // que no aparezca el teclado; con teclado físico se sigue navegando con Tab).
+    openSheet: (id, { focusField = true } = {}) => {
         const sheet = document.getElementById(id);
         app.sheetOpener = document.activeElement;
         document.getElementById('sheet-backdrop').classList.add('open');
         sheet.classList.add('open');
-        setTimeout(() => { const f = sheet.querySelector('input:not([type=hidden]), select'); if (f) f.focus(); }, 320);
+        setTimeout(() => {
+            const f = focusField && sheet.querySelector('input:not([type=hidden]):not([type=file]), select');
+            (f || sheet).focus({ preventScroll: true });
+        }, 320);
     },
     openAddSheet: () => {
+        app.iconPickers.new.set(null);
         app.addBarcodes = [];
         app.renderBarcodes('add');
         document.getElementById('new-name').value = '';

@@ -12,13 +12,84 @@ function fail($code, $message) {
 
 // Proteger API: si no está logueado, error 401. El poll automático de la lista
 // (?poll=1) no cuenta como uso para la caducidad por inactividad.
-if (!isAuthenticated(!isset($_GET['poll']))) { fail(401, 'No autorizado'); }
+// Tampoco cargar imágenes (?icon=), que ocurre al redibujar la lista tras el poll.
+if (!isAuthenticated(!isset($_GET['poll']) && !isset($_GET['icon']))) { fail(401, 'No autorizado'); }
 
 // La "base de datos" vive en su propio directorio, separado del código.
 $dataFile = __DIR__ . '/data/items.json';
 $lockFile = __DIR__ . '/data/items.lock';
 $backupDir = __DIR__ . '/data/backups';
 $backupKeep = 30; // días de backups diarios que se conservan
+
+// --- Imágenes de los artículos ---
+// Viven en data/icons/<id>.png (data/ está bloqueado por .htaccess) y se
+// sirven solo con sesión, a través de api.php?icon=<id>. El navegador ya las
+// manda como PNG de 128×128; aquí se valida que lo sean de verdad.
+$iconDir = __DIR__ . '/data/icons';
+const ICON_MAX_BYTES = 200000;
+const ICON_MAX_SIDE = 256;
+const ICON_ORPHAN_GRACE = 3600; // una imagen subida pero aún no guardada vive 1h
+
+function iconIdValid($id) { return is_string($id) && preg_match('/^[a-f0-9]{16}$/', $id); }
+function iconPath($id) { global $iconDir; return $iconDir . '/' . $id . '.png'; }
+
+function serveIcon($id) {
+    if (!iconIdValid($id)) { fail(400, 'Imagen inválida.'); }
+    $path = iconPath($id);
+    if (!is_file($path)) { fail(404, 'Imagen no encontrada.'); }
+    session_write_close(); // libera la sesión: las imágenes se sirven en paralelo
+    header_remove('Pragma');
+    header_remove('Expires');
+    header('Content-Type: image/png');
+    header('Content-Length: ' . filesize($path));
+    header('X-Content-Type-Options: nosniff');
+    header("Content-Security-Policy: default-src 'none'; sandbox");
+    // El id es único por imagen (otra subida genera otro id): se cachea sin
+    // miedo en el navegador, pero solo de forma privada.
+    header('Cache-Control: private, max-age=31536000, immutable');
+    readfile($path);
+    exit();
+}
+
+function saveIcon($dataUrl) {
+    global $iconDir;
+    if (!is_string($dataUrl) || strpos($dataUrl, 'data:image/png;base64,') !== 0) { fail(400, 'La imagen debe enviarse como PNG.'); }
+    $bin = base64_decode(substr($dataUrl, 22), true);
+    if ($bin === false || strlen($bin) === 0 || strlen($bin) > ICON_MAX_BYTES) { fail(400, 'La imagen es demasiado grande o está dañada.'); }
+    $info = @getimagesizefromstring($bin);
+    if (!$info || $info[2] !== IMAGETYPE_PNG || $info[0] < 1 || $info[1] < 1 || $info[0] > ICON_MAX_SIDE || $info[1] > ICON_MAX_SIDE) {
+        fail(400, 'El archivo no es una imagen PNG válida.');
+    }
+    // Si el servidor tiene GD, se vuelve a codificar: descarta cualquier dato
+    // extra que viniera escondido en el archivo.
+    if (function_exists('imagecreatefromstring') && function_exists('imagepng')) {
+        $im = @imagecreatefromstring($bin);
+        if (!$im) { fail(400, 'El archivo no es una imagen PNG válida.'); }
+        imagealphablending($im, false);
+        imagesavealpha($im, true);
+        ob_start();
+        imagepng($im);
+        $bin = ob_get_clean();
+        imagedestroy($im);
+    }
+    if (!is_dir($iconDir) && !@mkdir($iconDir, 0755, true)) { fail(500, 'No se pudo guardar la imagen.'); }
+    $id = bin2hex(random_bytes(8));
+    if (@file_put_contents(iconPath($id), $bin) !== strlen($bin)) { fail(500, 'No se pudo guardar la imagen.'); }
+    return $id;
+}
+
+// Borra las imágenes que ningún artículo usa (artículos borrados, imágenes
+// reemplazadas o subidas que nunca se guardaron), con un margen de 1h.
+function cleanupIcons($items) {
+    global $iconDir;
+    if (!is_dir($iconDir)) { return; }
+    $used = [];
+    foreach ($items as $it) { if (isset($it['icon'])) { $used[$it['icon']] = true; } }
+    foreach (glob($iconDir . '/*.png') ?: [] as $file) {
+        $id = basename($file, '.png');
+        if (!isset($used[$id]) && filemtime($file) < time() - ICON_ORPHAN_GRACE) { @unlink($file); }
+    }
+}
 
 // Bloqueo exclusivo durante todo el ciclo leer → comprobar versión → escribir,
 // para que dos guardados simultáneos no pasen ambos la comprobación de versión.
@@ -142,6 +213,8 @@ function cleanItems($items) {
             'price' => round((float)$price, 2),
         ];
         if ($barcodes) { $clean['barcodes'] = $barcodes; }
+        // Imagen: solo se conserva si apunta a un archivo existente.
+        if (iconIdValid($it['icon'] ?? null) && is_file(iconPath($it['icon']))) { $clean['icon'] = $it['icon']; }
         $out[] = $clean;
     }
     return $out;
@@ -150,6 +223,7 @@ function cleanItems($items) {
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
+    if (isset($_GET['icon'])) { serveIcon($_GET['icon']); }
     echo json_encode(getDB());
     exit();
 }
@@ -159,6 +233,12 @@ if ($method === 'POST') {
     // sin un preflight CORS que este servidor no autoriza.
     if (stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== 0) { fail(415, 'Se esperaba JSON.'); }
     $input = json_decode(file_get_contents('php://input'), true);
+
+    // Subida de la imagen de un artículo (no toca la lista)
+    if (is_array($input) && isset($input['iconUpload'])) {
+        echo json_encode(['status' => 'success', 'icon' => saveIcon($input['iconUpload'])]);
+        exit();
+    }
     if (!is_array($input) || !isset($input['version']) || !is_numeric($input['version'])) { fail(400, 'Datos de entrada inválidos.'); }
     $items = cleanItems($input['items'] ?? null);
     if ($items === null) { fail(400, 'Artículos inválidos.'); }
@@ -175,6 +255,7 @@ if ($method === 'POST') {
 
     $newState = ['version' => $currentDB['version'] + 1, 'items' => $items];
     saveDB($newState);
+    cleanupIcons($items);
     echo json_encode(['status' => 'success', 'newVersion' => $newState['version'], 'items' => $items]);
     exit();
 }
