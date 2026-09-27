@@ -5,6 +5,7 @@ const app = {
     ICONS: {
         check: '<polyline points="20 6 9 17 4 12"/>',
         cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+        flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
         barcode: '<path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
         trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>'
@@ -54,6 +55,7 @@ const app = {
             }
         }));
         document.addEventListener('keydown', app.onSheetKeydown);
+        document.querySelector('.scanner-view').addEventListener('click', app.focusAt);
         ['add', 'edit'].forEach(which => document.getElementById(`${which === 'add' ? 'new' : 'edit'}-barcodes`).addEventListener('click', (e) => {
             const btn = e.target.closest('.bc-remove');
             if (!btn) return;
@@ -455,6 +457,93 @@ const app = {
         };
     },
 
+    // --- Cámara ---
+    // En teléfonos con varias cámaras traseras, facingMode puede elegir la gran
+    // angular o la macro, que no enfocan de cerca (imagen borrosa, lectura lenta).
+    // Se busca una trasera con enfoque automático continuo y se recuerda en el
+    // teléfono; se activa el enfoque continuo y un poco de zoom, para sostener el
+    // teléfono más lejos (por encima de la distancia mínima de enfoque).
+    CAMERA_KEY: 'grocman.camera',
+    CAMERA_ZOOM: 1.8,
+    trackCaps: (track) => { try { return (track && track.getCapabilities && track.getCapabilities()) || {}; } catch (e) { return {}; } },
+    canAutofocus: (track) => (app.trackCaps(track).focusMode || []).includes('continuous'),
+    stopStream: (stream) => { if (stream) stream.getTracks().forEach(t => t.stop()); },
+
+    // Abre la mejor cámara trasera. alive() = el escáner sigue abierto.
+    startCamera: async (alive) => {
+        const open = (video) => navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, ...video }, audio: false
+        });
+        let saved = null;
+        try { saved = localStorage.getItem(app.CAMERA_KEY); } catch (e) { }
+        if (saved) {
+            try { return await open({ deviceId: { exact: saved } }); }
+            catch (e) { try { localStorage.removeItem(app.CAMERA_KEY); } catch (e2) { } } // ya no existe
+        }
+        let stream = await open({ facingMode: { ideal: 'environment' } });
+        const first = stream.getVideoTracks()[0];
+        const firstId = first.getSettings().deviceId;
+        if (!app.canAutofocus(first) && alive()) {
+            // Probar las otras cámaras traseras (de una en una: algunos teléfonos no
+            // abren dos a la vez) y quedarse con la primera que enfoque sola.
+            const others = (await navigator.mediaDevices.enumerateDevices())
+                .filter(d => d.kind === 'videoinput' && d.deviceId && d.deviceId !== firstId && !/front|user|frontal|delanter/i.test(d.label));
+            let found = null;
+            for (const d of others) {
+                if (!alive()) break;
+                app.stopStream(stream);
+                stream = null;
+                try { stream = await open({ deviceId: { exact: d.deviceId } }); } catch (e) { continue; }
+                const t = stream.getVideoTracks()[0];
+                if (t.getSettings().facingMode !== 'user' && app.canAutofocus(t)) { found = stream; break; }
+            }
+            if (!found) { // ninguna enfoca sola: volver a la primera
+                app.stopStream(stream);
+                stream = await open({ deviceId: { exact: firstId } });
+            } else {
+                stream = found;
+            }
+        }
+        const chosen = stream.getVideoTracks()[0];
+        if (app.canAutofocus(chosen)) { try { localStorage.setItem(app.CAMERA_KEY, chosen.getSettings().deviceId); } catch (e) { } }
+        return stream;
+    },
+
+    // Enfoque continuo + zoom moderado (si la cámara lo permite).
+    tuneCamera: async (track) => {
+        const caps = app.trackCaps(track);
+        const adv = {};
+        if ((caps.focusMode || []).includes('continuous')) adv.focusMode = 'continuous';
+        if (caps.zoom && caps.zoom.max > 1) adv.zoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min || 1, app.CAMERA_ZOOM));
+        if (Object.keys(adv).length) { try { await track.applyConstraints({ advanced: [adv] }); } catch (e) { } }
+    },
+
+    // Tocar la imagen: enfocar en ese punto (si la cámara lo permite).
+    focusAt: async (e) => {
+        const scan = app.scan;
+        const track = scan && scan.stream && scan.stream.getVideoTracks()[0];
+        if (!track) return;
+        const caps = app.trackCaps(track);
+        if (!(caps.focusMode || []).includes('single-shot')) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        const point = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+        try {
+            await track.applyConstraints({ advanced: [{ focusMode: 'single-shot', pointsOfInterest: [point] }] });
+            setTimeout(() => { if (app.scan === scan) app.tuneCamera(track); }, 1500); // y de vuelta al continuo
+        } catch (e2) { }
+    },
+
+    toggleTorch: async () => {
+        const scan = app.scan;
+        const track = scan && scan.stream && scan.stream.getVideoTracks()[0];
+        if (!track) return;
+        scan.torch = !scan.torch;
+        try { await track.applyConstraints({ advanced: [{ torch: scan.torch }] }); } catch (e) { scan.torch = false; }
+        const btn = document.getElementById('scanner-torch');
+        btn.setAttribute('aria-pressed', String(!!scan.torch));
+        btn.classList.toggle('on', !!scan.torch);
+    },
+
     // Abre el escáner; se resuelve con el código normalizado o null si se cancela.
     // opener: el botón que lo abrió, que recupera el foco al cerrar (no un campo
     // de texto: en el teléfono eso abriría el teclado justo después de escanear).
@@ -462,8 +551,13 @@ const app = {
         const el = document.getElementById('scanner');
         const video = document.getElementById('scanner-video');
         const status = document.getElementById('scanner-status');
-        const scan = { resolve, stream: null, timer: 0, busy: false, last: '', hits: 0, opener };
+        const scan = { resolve, stream: null, timer: 0, hintTimer: 0, last: '', hits: 0, opener, torch: false };
         app.scan = scan;
+        const alive = () => app.scan === scan;
+        const torchBtn = document.getElementById('scanner-torch');
+        torchBtn.hidden = true;
+        torchBtn.classList.remove('on');
+        torchBtn.setAttribute('aria-pressed', 'false');
         document.getElementById('scanner-code').value = '';
         status.textContent = 'Abriendo la cámara…';
         el.hidden = false;
@@ -471,25 +565,30 @@ const app = {
         (async () => {
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('sin cámara');
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-                    audio: false
-                });
-                if (app.scan !== scan) { stream.getTracks().forEach(t => t.stop()); return; }
+                const stream = await app.startCamera(alive);
+                if (!alive()) { app.stopStream(stream); return; }
                 scan.stream = stream;
+                const track = stream.getVideoTracks()[0];
+                await app.tuneCamera(track);
+                torchBtn.hidden = !app.trackCaps(track).torch;
                 video.srcObject = stream;
                 await video.play();
                 const decode = await app.getDecoder();
-                if (app.scan !== scan) return;
+                if (!alive()) return;
                 status.textContent = 'Apunta al código de barras';
-                scan.timer = setInterval(async () => {
-                    if (scan.busy || app.scan !== scan) return;
-                    scan.busy = true;
+                scan.hintTimer = setTimeout(() => {
+                    if (alive()) status.textContent = 'Aleja un poco el teléfono hasta que el código se vea nítido. Toca la imagen para enfocar.';
+                }, 6000);
+                // Análisis continuo: cada cuadro en cuanto termina el anterior.
+                const tick = async () => {
+                    if (!alive()) return;
                     try {
                         const r = await decode(video);
-                        if (r && app.scan === scan) app.onScanRead(r);
-                    } finally { scan.busy = false; }
-                }, 180);
+                        if (r && alive()) app.onScanRead(r);
+                    } catch (e) { }
+                    if (alive()) scan.timer = setTimeout(tick, 40);
+                };
+                tick();
             } catch (e) {
                 if (app.scan !== scan) return;
                 status.textContent = e && e.name === 'NotAllowedError'
@@ -526,8 +625,9 @@ const app = {
         const scan = app.scan;
         if (!scan) return;
         app.scan = null;
-        clearInterval(scan.timer);
-        if (scan.stream) scan.stream.getTracks().forEach(t => t.stop());
+        clearTimeout(scan.timer);
+        clearTimeout(scan.hintTimer);
+        app.stopStream(scan.stream);
         const video = document.getElementById('scanner-video');
         video.pause();
         video.srcObject = null;

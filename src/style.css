@@ -369,6 +369,17 @@ body {
     background: rgba(255, 255, 255, 0.12); color: #fff;
 }
 .scanner-close .lucide { width: 20px; height: 20px; }
+.scanner-top h3 { flex: 1; }
+.scanner-torch {
+    width: 40px; height: 40px; margin-right: 8px; border-radius: 12px; border: none; padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, 0.12); color: #fff;
+}
+.scanner-torch[hidden] { display: none; }
+.scanner-torch .lucide { width: 20px; height: 20px; }
+.scanner-torch.on { background: #ffd43b; color: #1a1a1a; }
+.scanner-torch:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.scanner-view { cursor: crosshair; }
 .scanner-view { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #000; }
 .scanner-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* Recuadro guía (franja central, la misma que analiza el lector) */
