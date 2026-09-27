@@ -13,3 +13,4 @@ const ITEM_NAME_MAX = 120;
 const ITEM_NOTE_MAX = 500;
 const ITEM_BARCODES_MAX = 30;       // productos asociados por artículo
 const BARCODE_LABEL_MAX = 200;
+const LISTS = ['regular', 'once'];   // lista normal (se repone) / compras de una vez

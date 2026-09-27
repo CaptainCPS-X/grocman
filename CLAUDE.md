@@ -53,7 +53,8 @@ BASE="sftp://$HOST/~/jezerart.com/compra"
   responda **403**.
 - En `data/` la app crea sola (NO tocar): `items.lock` (bloqueo de escritura),
   `backups/` (copia diaria, 30 días), `sessions/` (sesiones de login),
-  `icons/` (imágenes de los artículos) y
+  `icons/` (imágenes de los artículos), `products.json` (caché de búsquedas
+  de productos en UPCitemdb) y
   `login_attempts.json` (intentos fallidos por IP).
 - Antes de subir: `node tests/smoke.mjs` (prueba de humo local, no toca datos).
 - Verificar tras subir: descargar el archivo y `cmp` contra `src/`.

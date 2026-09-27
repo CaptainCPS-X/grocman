@@ -448,6 +448,8 @@ body {
     transition: background-color 0.15s;
 }
 .ip-upload { background: rgba(0, 123, 255, 0.10); color: var(--primary-dark); }
+/* El botón es un <label> dentro del formulario: sin el estilo de las etiquetas. */
+.form label.ip-upload { font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--primary-dark); }
 .ip-upload:hover { background: rgba(0, 123, 255, 0.18); }
 .ip-upload:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* El input real queda invisible pero enfocable (teclado / lector de pantalla). */
@@ -460,3 +462,131 @@ body {
 
 /* La hoja recibe el foco al abrir "Editar" (sin teclado): sin anillo de foco. */
 .sheet:focus { outline: none; }
+
+/* ===================================================================== */
+/* --- Listas (Regular / Una vez), nivel de stock y vista previa ---     */
+/* ===================================================================== */
+/* Selector de lista */
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 13px; background: rgba(0, 0, 0, 0.05); }
+.seg-opt {
+    flex: 1; padding: 9px 8px; border: none; border-radius: 10px; cursor: pointer;
+    background: transparent; color: #495057; font-size: 14px; font-weight: 600; font-family: inherit;
+    display: inline-flex; align-items: baseline; justify-content: center; gap: 5px;
+    transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.seg-opt .seg-sub { font-size: 11px; font-weight: 500; color: #98a2ac; }
+.seg-opt.active { background: #fff; color: var(--primary-dark); box-shadow: 0 2px 8px rgba(31, 38, 135, 0.12); }
+.seg-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* Etiqueta "Una vez" en la lista de compra */
+.once-badge {
+    display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 9px; vertical-align: 2px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+    color: #7048e8; background: rgba(112, 72, 232, 0.12);
+}
+.cat-header.once-saved { margin-top: 18px; }
+.view-empty-sub { font-size: 13px; color: #adb5bd; }
+
+/* Nivel en Editar: interruptor + slider */
+.level-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.form .switch, .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: #495057; text-transform: none; letter-spacing: 0; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-ui { position: relative; width: 38px; height: 22px; border-radius: 11px; background: #ced4da; transition: background-color 0.15s; flex-shrink: 0; }
+.switch-ui::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); transition: transform 0.15s; }
+.switch input:checked + .switch-ui { background: var(--primary); }
+.switch input:checked + .switch-ui::after { transform: translateX(16px); }
+.switch input:focus-visible + .switch-ui { outline: 2px solid var(--primary); outline-offset: 2px; }
+.level-control { display: flex; align-items: center; gap: 12px; }
+.level-control[hidden], #edit-level-field[hidden] { display: none; }
+.level-control input[type=range] { flex: 1; padding: 0; border: none; background: none; box-shadow: none; }
+.level-out { min-width: 3.2em; text-align: right; font-size: 16px; font-weight: 700; color: var(--primary-dark); font-variant-numeric: tabular-nums; }
+/* .form input quita la apariencia nativa a todos los campos: el slider la necesita. */
+.form input[type=range] {
+    -webkit-appearance: auto; appearance: auto; width: auto; padding: 0; margin: 0;
+    border: none; border-radius: 0; background: none; box-shadow: none;
+    accent-color: var(--primary); height: 28px;
+}
+.form input[type=range]:focus { box-shadow: none; }
+.form .level-range-big { width: 100%; height: 40px; }
+
+/* Hoja rápida de nivel */
+.level-big { display: block; text-align: center; font-size: 44px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.level-big.lv-ok { color: #1a7431; }
+.level-big.lv-mid { color: #b7791f; }
+.level-big.lv-low { color: #c0392b; }
+.level-range-big { width: 100%; height: 40px; }
+.level-ticks { display: flex; justify-content: space-between; font-size: 12px; color: #98a2ac; margin-top: -8px; }
+
+/* Barrita de cuánto queda, con borde animado (como el de overtime en payman) */
+@property --lv-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.level-bar {
+    display: flex; align-items: center; gap: 8px; width: 100%; max-width: 220px;
+    margin-top: 6px; padding: 0; border: none; background: none; cursor: pointer; font-family: inherit;
+    --c1: #28a745; --c2: #8ce99a; --c3: #20c997;
+}
+.level-bar.lv-mid { --c1: #f59f00; --c2: #ffd43b; --c3: #fd7e14; }
+.level-bar.lv-low { --c1: #e03131; --c2: #ff8787; --c3: #f76707; }
+.lv-track {
+    position: relative; flex: 1; height: 10px; border-radius: 6px;
+    background: rgba(0, 0, 0, 0.07); overflow: hidden;
+}
+.lv-fill {
+    position: absolute; inset: 0 auto 0 0; width: var(--lv); border-radius: 6px;
+    background: linear-gradient(90deg, var(--c1), var(--c3));
+}
+/* Anillo: degradado cónico que gira, recortado con máscara al borde. */
+.lv-track::after {
+    content: ''; position: absolute; inset: 0; padding: 1.5px; border-radius: inherit;
+    background: conic-gradient(from var(--lv-angle), var(--c1), var(--c2), var(--c3), var(--c1));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    animation: lv-spin 3s linear infinite;
+}
+.level-bar.lv-low .lv-track::after { animation-duration: 1.4s; } /* se está acabando: más visible */
+@keyframes lv-spin { to { --lv-angle: 360deg; } }
+.lv-text { font-size: 12px; font-weight: 700; color: #495057; min-width: 3.4em; font-variant-numeric: tabular-nums; }
+.level-bar.lv-low .lv-text { color: #c0392b; }
+.level-bar:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+
+/* Nombre editable del producto en su ficha */
+.bc-label-input {
+    width: 100%; box-sizing: border-box; padding: 2px 6px; margin: 0 0 0 -6px;
+    border: 1px solid transparent; border-radius: 7px; background: transparent;
+    font-size: 14px; font-weight: 600; font-family: inherit; color: #212529;
+}
+.bc-label-input::placeholder { color: #adb5bd; font-weight: 500; }
+.bc-label-input:hover { border-color: rgba(0, 0, 0, 0.08); }
+.bc-label-input:focus { outline: none; border-color: var(--primary); background: #fff; }
+
+/* Miniatura con imagen: se puede tocar para verla grande */
+.item-thumb.has-img { cursor: zoom-in; }
+
+/* Vista previa de la imagen */
+.lightbox {
+    position: fixed; inset: 0; z-index: 2500;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    padding: 24px; background: rgba(11, 15, 25, 0.86);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    cursor: zoom-out; animation: lb-in 0.18s ease-out;
+}
+.lightbox[hidden] { display: none; }
+.lightbox img {
+    max-width: min(92vw, 520px); max-height: 70vh; border-radius: 18px;
+    background: #fff; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45); object-fit: contain;
+}
+.lightbox-caption { margin: 0; color: #fff; font-size: 18px; font-weight: 700; text-align: center; }
+.lightbox-close {
+    position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 14px;
+    width: 42px; height: 42px; border-radius: 12px; border: none; padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, 0.14); color: #fff;
+}
+.lightbox-close .lucide { width: 22px; height: 22px; }
+.lightbox-close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@keyframes lb-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .lv-track::after { animation: none; }
+    .lightbox { animation: none; }
+}

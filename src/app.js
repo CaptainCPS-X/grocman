@@ -42,6 +42,7 @@ const app = {
     flushing: null,    // promesa del guardado en curso
     changeSeq: 0,      // sube con cada cambio local: descarta respuestas de poll obsoletas
     POLL_MS: 10000,
+    currentTab: 'shopping',
 
     init: async () => {
         const shopping = document.getElementById('shopping-list-render');
@@ -58,11 +59,36 @@ const app = {
         document.addEventListener('keydown', app.onSheetKeydown);
         document.querySelector('.scanner-view').addEventListener('click', app.focusAt);
         app.iconPickers = { new: app.makeIconPicker('new'), edit: app.makeIconPicker('edit') };
+        document.getElementById('once-list-render').addEventListener('click', app.onOnceClick);
+        document.getElementById('once-list-render').addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) { e.preventDefault(); e.target.click(); }
+        });
+        // Selectores de lista (Regular / Una vez)
+        ['new-list', 'edit-list'].forEach(id => document.getElementById(id).addEventListener('click', (e) => {
+            const opt = e.target.closest('.seg-opt');
+            if (!opt) return;
+            app.setSeg(id, opt.dataset.list);
+            if (id === 'edit-list') app.updateLevelField();
+        }));
+        // Nivel en Editar: interruptor + slider
+        document.getElementById('edit-level-on').addEventListener('change', app.updateLevelField);
+        document.getElementById('edit-level').addEventListener('input', (e) => { document.getElementById('edit-level-out').textContent = e.target.value + '%'; });
+        document.getElementById('level-range').addEventListener('input', (e) => app.showLevel(+e.target.value));
+        document.getElementById('lightbox-img').addEventListener('error', (e) => {
+            // Imágenes subidas antes de la vista previa: solo tienen la miniatura.
+            const img = e.target;
+            if (img.dataset.fallback) { img.src = img.dataset.fallback; img.dataset.fallback = ''; }
+        });
         ['add', 'edit'].forEach(which => document.getElementById(`${which === 'add' ? 'new' : 'edit'}-barcodes`).addEventListener('click', (e) => {
             const btn = e.target.closest('.bc-remove');
             if (!btn) return;
             (which === 'add' ? app.addBarcodes : app.editBarcodes).splice(+btn.dataset.i, 1);
             app.renderBarcodes(which);
+        }));
+        ['add', 'edit'].forEach(which => document.getElementById(`${which === 'add' ? 'new' : 'edit'}-barcodes`).addEventListener('input', (e) => {
+            if (!e.target.classList.contains('bc-label-input')) return;
+            const entry = (which === 'add' ? app.addBarcodes : app.editBarcodes)[+e.target.dataset.i];
+            if (entry) entry.label = e.target.value.trim();
         }));
         await app.fetchData({ poll: false });
         // El poll se pausa con la pestaña en segundo plano y se pone al día al volver.
@@ -149,7 +175,21 @@ const app = {
     render: () => {
         app.renderShopping();
         app.renderInventory();
+        app.renderOnce();
         app.updateTotal();
+    },
+
+    isOnce: (item) => item.list === 'once',
+    // Al volver a tener el artículo en casa, su nivel vuelve a 100%.
+    restocked: (item) => (Number.isInteger(item.level) && !app.isOnce(item)) ? { ...item, level: 100 } : item,
+
+    // Barrita de cuánto queda (solo artículos regulares con nivel medido).
+    levelBarHTML: (item) => {
+        if (app.isOnce(item) || !Number.isInteger(item.level)) return '';
+        const lv = item.level, cls = lv >= 60 ? 'ok' : lv >= 30 ? 'mid' : 'low';
+        return `<button type="button" class="level-bar lv-${cls}" style="--lv:${lv}%" aria-label="Queda ${lv}% de ${app.esc(item.name)}. Ajustar">
+            <span class="lv-track"><span class="lv-fill"></span></span><span class="lv-text">${lv === 0 ? 'Agotado' : lv + '%'}</span>
+        </button>`;
     },
 
     // --- TOTALES Y CHECKOUT ---
@@ -185,7 +225,7 @@ const app = {
 
     checkout: async () => {
         if (!confirm("¿Ya pagaste? Los artículos del carrito pasan al inventario.")) return;
-        const ok = await app.change(items => items.map(i => i.status === 'in_cart' ? { ...i, status: 'stocked' } : i));
+        const ok = await app.change(items => items.map(i => i.status === 'in_cart' ? app.restocked({ ...i, status: 'stocked' }) : i));
         if (ok) app.showToast("¡Compra finalizada!");
     },
 
@@ -221,8 +261,9 @@ const app = {
                     <div class="item-main" role="button" tabindex="0" aria-label="Editar ${name}">
                         ${app.thumbHTML(item)}
                         <div class="item-text">
-                            <div class="item-name">${name}${price}</div>
+                            <div class="item-name">${name}${price}${app.isOnce(item) ? '<span class="once-badge">Una vez</span>' : ''}</div>
                             ${item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : ''}
+                            ${app.levelBarHTML(item)}
                         </div>
                     </div>
                     <button type="button" class="check-circle ${isInCart ? 'in-cart' : ''}" aria-pressed="${isInCart}" aria-label="${isInCart ? 'Sacar del carrito' : 'Poner en el carrito'}: ${name}">${app.svgIcon('check')}</button>
@@ -238,17 +279,20 @@ const app = {
         if (!row) return;
         const name = row.dataset.name;
         if (e.target.closest('.check-circle')) app.toggleShoppingStatus(name);
+        else if (e.target.closest('.item-thumb.has-img')) app.openLightbox(name);
+        else if (e.target.closest('.level-bar')) app.openLevelSheet(name);
         else if (e.target.closest('.item-main')) app.openEditSheet(name);
     },
 
     // --- INVENTARIO ---
     renderInventory: () => {
         const container = document.getElementById('inventory-list-render');
-        if (app.data.items.length === 0) {
+        const regular = app.data.items.filter(i => !app.isOnce(i));
+        if (regular.length === 0) {
             container.innerHTML = '<div class="view-empty">Sin artículos aún</div>';
             return;
         }
-        const sorted = [...app.data.items].sort((a, b) => {
+        const sorted = regular.sort((a, b) => {
             const aActive = (a.status === 'needed' || a.status === 'in_cart');
             const bActive = (b.status === 'needed' || b.status === 'in_cart');
             if (aActive === bActive) return a.name.localeCompare(b.name);
@@ -268,6 +312,7 @@ const app = {
                     <div class="inv-text">
                     <div class="inv-name">${name}${price}</div>
                     <div class="inv-cat">${app.esc(item.category)}${(item.barcodes || []).length ? ` · ${item.barcodes.length} producto${item.barcodes.length === 1 ? '' : 's'}` : ''}</div>
+                    ${app.levelBarHTML(item)}
                     </div>
                 </div>
                 <div class="inv-actions">
@@ -285,7 +330,120 @@ const app = {
         const name = item.dataset.name;
         if (e.target.closest('.inv-del')) app.deleteItem(name);
         else if (e.target.closest('.inv-toggle')) app.toggleInventoryStatus(name);
+        else if (e.target.closest('.item-thumb.has-img')) app.openLightbox(name);
+        else if (e.target.closest('.level-bar')) app.openLevelSheet(name);
         else if (e.target.closest('.inv-main')) app.openEditSheet(name);
+    },
+
+    // --- UNA VEZ (compras que no se reponen: escurridor, etc.) ---
+    // Aparecen en la lista normal mientras están por comprar; al comprarlas
+    // quedan guardadas aquí para volver a pedirlas algún día.
+    renderOnce: () => {
+        const container = document.getElementById('once-list-render');
+        const once = app.data.items.filter(app.isOnce).sort((a, b) => a.name.localeCompare(b.name));
+        if (!once.length) {
+            container.innerHTML = '<div class="view-empty">Sin compras de una vez.<br><span class="view-empty-sub">Al agregar o editar un artículo, elige la lista "Una vez".</span></div>';
+            return;
+        }
+        const row = (item) => {
+            const pending = item.status !== 'stocked';
+            const name = app.esc(item.name);
+            const price = item.price > 0 ? `<span class="inv-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
+            return `
+            <div class="inv-item ${pending ? 'needed' : 'stocked'}" data-name="${name}">
+                <div class="inv-main" role="button" tabindex="0" aria-label="Editar ${name}">
+                    ${app.thumbHTML(item)}
+                    <div class="inv-text">
+                        <div class="inv-name">${name}${price}</div>
+                        <div class="inv-cat">${app.esc(item.category)}${item.status === 'in_cart' ? ' · en el carrito' : ''}</div>
+                    </div>
+                </div>
+                <div class="inv-actions">
+                    <button type="button" class="inv-toggle ${pending ? 'tengo' : 'pedir'}" aria-label="${pending ? 'Ya lo tengo' : 'Pedir'}: ${name}">${pending ? 'Ya lo tengo' : '+ Pedir'}</button>
+                    <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
+                </div>
+            </div>`;
+        };
+        const pending = once.filter(i => i.status !== 'stocked'), saved = once.filter(i => i.status === 'stocked');
+        container.innerHTML =
+            (pending.length ? `<div class="cat-header">Por comprar<span class="cat-count">· ${pending.length}</span></div>${pending.map(row).join('')}` : '') +
+            (saved.length ? `<div class="cat-header once-saved">Guardadas<span class="cat-count">· ${saved.length}</span></div>${saved.map(row).join('')}` : '');
+    },
+
+    onOnceClick: (e) => {
+        const el = e.target.closest('.inv-item');
+        if (!el) return;
+        const name = el.dataset.name;
+        const item = app.data.items.find(i => i.name === name);
+        if (!item) return;
+        if (e.target.closest('.inv-del')) app.deleteItem(name);
+        else if (e.target.closest('.inv-toggle')) app.setStatus(name, item.status === 'stocked' ? 'needed' : 'stocked');
+        else if (e.target.closest('.item-thumb.has-img')) app.openLightbox(name);
+        else if (e.target.closest('.inv-main')) app.openEditSheet(name);
+    },
+
+    // --- SELECTOR DE LISTA (Regular / Una vez) ---
+    setSeg: (id, value) => {
+        document.querySelectorAll(`#${id} .seg-opt`).forEach(o => {
+            const on = o.dataset.list === value;
+            o.classList.toggle('active', on);
+            o.setAttribute('aria-checked', String(on));
+        });
+    },
+    segValue: (id) => document.querySelector(`#${id} .seg-opt.active`)?.dataset.list || 'regular',
+
+    // --- NIVEL (cuánto queda en casa) ---
+    // En Editar: interruptor "Medir" + slider; no aplica a compras de una vez.
+    updateLevelField: () => {
+        const once = app.segValue('edit-list') === 'once';
+        const on = document.getElementById('edit-level-on').checked;
+        document.getElementById('edit-level-field').hidden = once;
+        document.getElementById('edit-level-control').hidden = !on;
+    },
+    showLevel: (lv) => {
+        const out = document.getElementById('level-out');
+        out.textContent = lv === 0 ? 'Agotado' : lv + '%';
+        out.className = 'level-big lv-' + (lv >= 60 ? 'ok' : lv >= 30 ? 'mid' : 'low');
+    },
+    // Tocar la barrita: hoja rápida para ajustar cuánto queda.
+    openLevelSheet: (name) => {
+        const item = app.data.items.find(i => i.name === name);
+        if (!item) return;
+        document.getElementById('level-name').value = item.name;
+        document.getElementById('level-sheet-title').textContent = `¿Cuánto queda de ${item.name}?`;
+        const lv = Number.isInteger(item.level) ? item.level : 100;
+        document.getElementById('level-range').value = lv;
+        app.showLevel(lv);
+        app.openSheet('level-sheet', { focusField: false });
+    },
+    saveLevel: (e) => {
+        e.preventDefault();
+        const name = document.getElementById('level-name').value;
+        const level = +document.getElementById('level-range').value;
+        app.change(items => items.map(i => i.name === name ? { ...i, level } : i));
+        app.closeSheets();
+    },
+
+    // --- VISTA PREVIA DE LA IMAGEN ---
+    openLightbox: (name) => {
+        const item = app.data.items.find(i => i.name === name);
+        if (!item || !item.icon) return;
+        const box = document.getElementById('lightbox');
+        const img = document.getElementById('lightbox-img');
+        img.dataset.fallback = app.iconURL(item.icon);
+        img.src = app.iconURL(item.icon) + '&size=l';
+        img.alt = item.name;
+        document.getElementById('lightbox-caption').textContent = item.name;
+        app.lightboxOpener = document.activeElement;
+        box.hidden = false;
+        box.querySelector('.lightbox-close').focus({ preventScroll: true });
+    },
+    closeLightbox: () => {
+        const box = document.getElementById('lightbox');
+        if (box.hidden) return;
+        box.hidden = true;
+        document.getElementById('lightbox-img').removeAttribute('src');
+        if (app.lightboxOpener && document.contains(app.lightboxOpener)) app.lightboxOpener.focus({ preventScroll: true });
     },
 
     // Cambia el estado de un artículo a un valor concreto (intención explícita).
@@ -303,7 +461,8 @@ const app = {
         const item = app.data.items.find(i => i.name === name);
         if (!item) return;
         const isActive = (item.status === 'needed' || item.status === 'in_cart');
-        app.setStatus(name, isActive ? 'stocked' : 'needed');
+        if (isActive) app.change(items => items.map(i => i.name === name ? app.restocked({ ...i, status: 'stocked' }) : i));
+        else app.setStatus(name, 'needed');
     },
 
     addItem: (e) => {
@@ -323,6 +482,7 @@ const app = {
             price: parseFloat(document.getElementById('new-price').value) || 0,
             status: 'needed'
         };
+        if (app.segValue('new-list') === 'once') newItem.list = 'once';
         const barcodes = app.addBarcodes.map(({ code, label }) => ({ code, label }));
         if (barcodes.length) newItem.barcodes = barcodes;
         if (app.iconPickers.new.get()) newItem.icon = app.iconPickers.new.get();
@@ -335,7 +495,7 @@ const app = {
         app.iconPickers.new.set(null);
         app.change(items => exists(items) ? items : [...items.map(i => app.withoutCodes(i, codes)), newItem]);
         app.closeSheets();
-        app.showToast('Agregado a la lista');
+        app.showToast(newItem.list === 'once' ? 'Agregado (una vez)' : 'Agregado a la lista');
     },
 
     deleteItem: (name) => {
@@ -355,6 +515,12 @@ const app = {
         app.editBarcodes = (item.barcodes || []).map(b => ({ ...b }));
         app.renderBarcodes('edit');
         app.iconPickers.edit.set(item.icon);
+        app.setSeg('edit-list', app.isOnce(item) ? 'once' : 'regular');
+        const measured = Number.isInteger(item.level);
+        document.getElementById('edit-level-on').checked = measured;
+        document.getElementById('edit-level').value = measured ? item.level : 100;
+        document.getElementById('edit-level-out').textContent = (measured ? item.level : 100) + '%';
+        app.updateLevelField();
         // Sin enfocar ningún campo: en el teléfono el teclado taparía la hoja.
         app.openSheet('edit-sheet', { focusField: false });
     },
@@ -380,7 +546,15 @@ const app = {
         };
         const codes = new Set(fields.barcodes.map(b => b.code));
         const icon = app.iconPickers.edit.get();
-        const edited = (item) => { const out = { ...item, ...fields }; if (icon) out.icon = icon; else delete out.icon; return out; };
+        const once = app.segValue('edit-list') === 'once';
+        const level = !once && document.getElementById('edit-level-on').checked ? +document.getElementById('edit-level').value : null;
+        const edited = (item) => {
+            const out = { ...item, ...fields };
+            if (icon) out.icon = icon; else delete out.icon;
+            if (once) out.list = 'once'; else delete out.list;
+            if (level !== null) out.level = level; else delete out.level;
+            return out;
+        };
         app.change(items => clashes(items) ? items
             : items.map(item => item.name === originalName ? edited(item) : app.withoutCodes(item, codes)));
         app.closeSheets();
@@ -678,7 +852,23 @@ const app = {
                 });
             } catch (e) { failed = true; } // sin conexión o sin respuesta: probar la siguiente
         }
-        if (!failed) app.productCache[code] = null; // "no encontrado" solo se recuerda si todas respondieron
+        // No está en Open *Facts (casi siempre: limpieza y cuidado personal):
+        // se pregunta al servidor, que consulta UPCitemdb y guarda la respuesta.
+        try {
+            const res = await fetch(`api.php?lookup=${code}`);
+            if (res.status === 401) { location.reload(); return null; }
+            const j = await res.json().catch(() => ({}));
+            if (res.ok && j.found) {
+                return (app.productCache[code] = {
+                    name: j.name, brand: j.brand || '', quantity: '',
+                    label: j.name,
+                    image: j.hasImage ? `api.php?productImage=${code}` : '',
+                    category: j.category || null
+                });
+            }
+            if (res.ok && !failed) app.productCache[code] = null; // "no encontrado" solo si todas respondieron
+            if (res.status === 503) app.showToast(j.error || 'Búsqueda ocupada; intenta en un momento');
+        } catch (e) { }
         return null;
     },
 
@@ -711,7 +901,8 @@ const app = {
             <div class="barcode-chip">
                 ${app.svgIcon('barcode', 'lucide bc-ico')}
                 <div class="bc-info">
-                    <div class="bc-label">${b.loading ? 'Buscando producto…' : app.esc(b.label || 'Producto sin nombre')}</div>
+                    ${b.loading ? '<div class="bc-label">Buscando producto…</div>'
+                        : `<input class="bc-label-input" data-i="${i}" value="${app.esc(b.label)}" placeholder="Nombre del producto" aria-label="Nombre del producto ${app.esc(b.code)}" maxlength="200">`}
                     <div class="bc-code">${app.esc(b.code)}</div>
                 </div>
                 <button type="button" class="bc-remove" data-i="${i}" aria-label="Quitar ${app.esc(b.label || b.code)}">${app.svgIcon('x')}</button>
@@ -774,24 +965,38 @@ const app = {
         ? `<span class="item-thumb has-img"><img src="${app.iconURL(item.icon)}" alt="" loading="lazy" decoding="async"></span>`
         : `<span class="item-thumb" aria-hidden="true">${app.catIcon(item.category)}</span>`,
 
-    // src: archivo elegido (File) o URL de la foto de Open Food Facts (con CORS).
-    toIconPNG: (src) => new Promise((resolve, reject) => {
+    // src: archivo elegido (File) o URL de una foto de producto (Open Food Facts
+    // con CORS, o api.php?productImage= del propio servidor). Devuelve
+    // { thumb: PNG 128×128 transparente, large: JPEG de hasta 640px }.
+    ICON_LARGE: 640,
+    toIconImages: (src) => new Promise((resolve, reject) => {
         const isFile = src instanceof Blob;
         if (isFile && !/^image\//.test(src.type)) { reject(new Error('Elige una imagen.')); return; }
         if (isFile && src.size > 15e6) { reject(new Error('La imagen es demasiado grande (máx. 15 MB).')); return; }
         const url = isFile ? URL.createObjectURL(src) : src;
         const img = new Image();
-        if (!isFile) img.crossOrigin = 'anonymous';
+        if (!isFile && /^https?:/.test(url)) img.crossOrigin = 'anonymous';
         img.onload = () => {
             if (isFile) URL.revokeObjectURL(url);
-            const S = app.ICON_SIZE, scale = Math.min(S / img.naturalWidth, S / img.naturalHeight);
-            const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
-            const canvas = document.createElement('canvas');
-            canvas.width = S; canvas.height = S;
-            const ctx = canvas.getContext('2d');
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
-            try { resolve(canvas.toDataURL('image/png')); } catch (e) { reject(new Error('No se pudo usar esa imagen.')); }
+            const iw = img.naturalWidth, ih = img.naturalHeight;
+            try {
+                const S = app.ICON_SIZE, k = Math.min(S / iw, S / ih);
+                const w = Math.max(1, Math.round(iw * k)), h = Math.max(1, Math.round(ih * k));
+                const t = document.createElement('canvas');
+                t.width = S; t.height = S;
+                const tc = t.getContext('2d');
+                tc.imageSmoothingQuality = 'high';
+                tc.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+                const L = Math.min(1, app.ICON_LARGE / Math.max(iw, ih));
+                const l = document.createElement('canvas');
+                l.width = Math.max(1, Math.round(iw * L)); l.height = Math.max(1, Math.round(ih * L));
+                const lc = l.getContext('2d');
+                lc.fillStyle = '#fff'; // JPEG sin transparencia
+                lc.fillRect(0, 0, l.width, l.height);
+                lc.imageSmoothingQuality = 'high';
+                lc.drawImage(img, 0, 0, l.width, l.height);
+                resolve({ thumb: t.toDataURL('image/png'), large: l.toDataURL('image/jpeg', 0.85) });
+            } catch (e) { reject(new Error('No se pudo usar esa imagen.')); }
         };
         img.onerror = () => { if (isFile) URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
         img.src = url;
@@ -817,8 +1022,8 @@ const app = {
             const my = ++seq;
             busy = true; status.textContent = ''; render();
             try {
-                const png = await app.toIconPNG(src);
-                const res = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iconUpload: png }) });
+                const imgs = await app.toIconImages(src);
+                const res = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iconUpload: imgs.thumb, iconLarge: imgs.large }) });
                 if (res.status === 401) { location.reload(); return; }
                 const json = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(json.error || failMsg);
@@ -861,21 +1066,28 @@ const app = {
         app.sheetOpener = document.activeElement;
         document.getElementById('sheet-backdrop').classList.add('open');
         sheet.classList.add('open');
-        setTimeout(() => {
+        // Enfocar al terminar de subir la hoja; se cancela si antes se cierra o se
+        // abre otra (si no, el foco saltaba a una hoja ya cerrada).
+        clearTimeout(app.sheetFocusTimer);
+        app.sheetFocusTimer = setTimeout(() => {
+            if (!sheet.classList.contains('open')) return;
             const f = focusField && sheet.querySelector('input:not([type=hidden]):not([type=file]), select');
             (f || sheet).focus({ preventScroll: true });
         }, 320);
     },
     openAddSheet: () => {
         app.iconPickers.new.set(null);
+        app.setSeg('new-list', app.currentTab === 'once' ? 'once' : 'regular');
         app.addBarcodes = [];
         app.renderBarcodes('add');
         document.getElementById('new-name').value = '';
         document.getElementById('new-price').value = '';
         document.getElementById('new-note').value = '';
-        app.openSheet('add-sheet');
+        // Sin enfocar el nombre: el teclado taparía la hoja (y a veces se escanea primero).
+        app.openSheet('add-sheet', { focusField: false });
     },
     closeSheets: () => {
+        clearTimeout(app.sheetFocusTimer);
         const wasOpen = document.querySelector('.sheet.open');
         document.getElementById('sheet-backdrop').classList.remove('open');
         document.querySelectorAll('.sheet').forEach(s => s.classList.remove('open'));
@@ -883,6 +1095,10 @@ const app = {
         app.sheetOpener = null;
     },
     onSheetKeydown: (e) => {
+        if (!document.getElementById('lightbox').hidden) {
+            if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); if (e.key === 'Escape') app.closeLightbox(); }
+            return;
+        }
         if (app.scan) {
             if (e.key === 'Escape') { e.preventDefault(); app.closeScanner(null); }
             else if (e.key === 'Tab') app.trapTab(document.getElementById('scanner'), e);
@@ -905,10 +1121,11 @@ const app = {
 
     // --- NAVEGACIÓN ---
     setTab: (tabName) => {
+        app.currentTab = tabName;
         document.querySelectorAll('.bn-item[data-view]').forEach(b =>
             b.classList.toggle('active', b.dataset.view === tabName));
-        document.getElementById('view-shopping').classList.toggle('hidden', tabName !== 'shopping');
-        document.getElementById('view-inventory').classList.toggle('hidden', tabName !== 'inventory');
+        ['shopping', 'inventory', 'once'].forEach(v =>
+            document.getElementById(`view-${v}`).classList.toggle('hidden', tabName !== v));
         app.updateTotal();
     },
 

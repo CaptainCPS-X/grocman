@@ -22,59 +22,85 @@ $backupDir = __DIR__ . '/data/backups';
 $backupKeep = 30; // días de backups diarios que se conservan
 
 // --- Imágenes de los artículos ---
-// Viven en data/icons/<id>.png (data/ está bloqueado por .htaccess) y se
-// sirven solo con sesión, a través de api.php?icon=<id>. El navegador ya las
-// manda como PNG de 128×128; aquí se valida que lo sean de verdad.
+// Viven en data/icons/ (data/ está bloqueado por .htaccess) y se sirven solo con
+// sesión, vía api.php?icon=<id>. Dos tamaños por imagen, con el mismo id:
+//   <id>.png   miniatura 128×128 (fondo transparente) para las filas
+//   <id>-l.jpg versión grande (hasta 640px) para la vista previa
+// El navegador ya las manda ajustadas; aquí se valida que sean imágenes reales
+// y se recodifican con GD si está disponible.
 $iconDir = __DIR__ . '/data/icons';
 const ICON_MAX_BYTES = 200000;
 const ICON_MAX_SIDE = 256;
+const ICON_LARGE_MAX_BYTES = 400000;
+const ICON_LARGE_MAX_SIDE = 1024;
 const ICON_ORPHAN_GRACE = 3600; // una imagen subida pero aún no guardada vive 1h
 
 function iconIdValid($id) { return is_string($id) && preg_match('/^[a-f0-9]{16}$/', $id); }
 function iconPath($id) { global $iconDir; return $iconDir . '/' . $id . '.png'; }
+function iconLargePath($id) { global $iconDir; return $iconDir . '/' . $id . '-l.jpg'; }
 
-function serveIcon($id) {
-    if (!iconIdValid($id)) { fail(400, 'Imagen inválida.'); }
-    $path = iconPath($id);
-    if (!is_file($path)) { fail(404, 'Imagen no encontrada.'); }
+function sendImage($path, $type, $cache) {
     session_write_close(); // libera la sesión: las imágenes se sirven en paralelo
     header_remove('Pragma');
     header_remove('Expires');
-    header('Content-Type: image/png');
+    header('Content-Type: ' . $type);
     header('Content-Length: ' . filesize($path));
     header('X-Content-Type-Options: nosniff');
     header("Content-Security-Policy: default-src 'none'; sandbox");
-    // El id es único por imagen (otra subida genera otro id): se cachea sin
-    // miedo en el navegador, pero solo de forma privada.
-    header('Cache-Control: private, max-age=31536000, immutable');
+    header('Cache-Control: ' . $cache);
     readfile($path);
     exit();
 }
 
-function saveIcon($dataUrl) {
-    global $iconDir;
-    if (!is_string($dataUrl) || strpos($dataUrl, 'data:image/png;base64,') !== 0) { fail(400, 'La imagen debe enviarse como PNG.'); }
-    $bin = base64_decode(substr($dataUrl, 22), true);
-    if ($bin === false || strlen($bin) === 0 || strlen($bin) > ICON_MAX_BYTES) { fail(400, 'La imagen es demasiado grande o está dañada.'); }
+function serveIcon($id, $large) {
+    if (!iconIdValid($id)) { fail(400, 'Imagen inválida.'); }
+    $path = $large ? iconLargePath($id) : iconPath($id);
+    if (!is_file($path)) { fail(404, 'Imagen no encontrada.'); }
+    // El id es único por imagen (otra subida genera otro id): se cachea sin
+    // miedo en el navegador, pero solo de forma privada.
+    sendImage($path, $large ? 'image/jpeg' : 'image/png', 'private, max-age=31536000, immutable');
+}
+
+// Decodifica y valida una imagen enviada como data URL. Devuelve los bytes
+// (recodificados con GD si está disponible) o termina con 400.
+function decodeUpload($dataUrl, $mime, $imageType, $maxBytes, $maxSide) {
+    $prefix = 'data:' . $mime . ';base64,';
+    if (!is_string($dataUrl) || strpos($dataUrl, $prefix) !== 0) { fail(400, 'Formato de imagen no válido.'); }
+    $bin = base64_decode(substr($dataUrl, strlen($prefix)), true);
+    if ($bin === false || strlen($bin) === 0 || strlen($bin) > $maxBytes) { fail(400, 'La imagen es demasiado grande o está dañada.'); }
     $info = @getimagesizefromstring($bin);
-    if (!$info || $info[2] !== IMAGETYPE_PNG || $info[0] < 1 || $info[1] < 1 || $info[0] > ICON_MAX_SIDE || $info[1] > ICON_MAX_SIDE) {
-        fail(400, 'El archivo no es una imagen PNG válida.');
+    if (!$info || $info[2] !== $imageType || $info[0] < 1 || $info[1] < 1 || $info[0] > $maxSide || $info[1] > $maxSide) {
+        fail(400, 'El archivo no es una imagen válida.');
     }
-    // Si el servidor tiene GD, se vuelve a codificar: descarta cualquier dato
-    // extra que viniera escondido en el archivo.
-    if (function_exists('imagecreatefromstring') && function_exists('imagepng')) {
+    if (function_exists('imagecreatefromstring')) {
         $im = @imagecreatefromstring($bin);
-        if (!$im) { fail(400, 'El archivo no es una imagen PNG válida.'); }
-        imagealphablending($im, false);
-        imagesavealpha($im, true);
+        if (!$im) { fail(400, 'El archivo no es una imagen válida.'); }
         ob_start();
-        imagepng($im);
+        if ($imageType === IMAGETYPE_PNG) {
+            imagealphablending($im, false);
+            imagesavealpha($im, true);
+            imagepng($im);
+        } else {
+            imagejpeg($im, null, 85);
+        }
         $bin = ob_get_clean();
         imagedestroy($im);
     }
+    return $bin;
+}
+
+// Guarda la miniatura (obligatoria) y la versión grande (opcional); devuelve el id.
+function saveIcon($thumbUrl, $largeUrl) {
+    global $iconDir;
+    $thumb = decodeUpload($thumbUrl, 'image/png', IMAGETYPE_PNG, ICON_MAX_BYTES, ICON_MAX_SIDE);
+    $large = $largeUrl === null ? null : decodeUpload($largeUrl, 'image/jpeg', IMAGETYPE_JPEG, ICON_LARGE_MAX_BYTES, ICON_LARGE_MAX_SIDE);
     if (!is_dir($iconDir) && !@mkdir($iconDir, 0755, true)) { fail(500, 'No se pudo guardar la imagen.'); }
     $id = bin2hex(random_bytes(8));
-    if (@file_put_contents(iconPath($id), $bin) !== strlen($bin)) { fail(500, 'No se pudo guardar la imagen.'); }
+    if (@file_put_contents(iconPath($id), $thumb) !== strlen($thumb)) { fail(500, 'No se pudo guardar la imagen.'); }
+    if ($large !== null && @file_put_contents(iconLargePath($id), $large) !== strlen($large)) {
+        @unlink(iconPath($id));
+        fail(500, 'No se pudo guardar la imagen.');
+    }
     return $id;
 }
 
@@ -85,10 +111,165 @@ function cleanupIcons($items) {
     if (!is_dir($iconDir)) { return; }
     $used = [];
     foreach ($items as $it) { if (isset($it['icon'])) { $used[$it['icon']] = true; } }
-    foreach (glob($iconDir . '/*.png') ?: [] as $file) {
-        $id = basename($file, '.png');
-        if (!isset($used[$id]) && filemtime($file) < time() - ICON_ORPHAN_GRACE) { @unlink($file); }
+    foreach (glob($iconDir . '/*') ?: [] as $file) {
+        if (!preg_match('/^([a-f0-9]{16})(-l\.jpg|\.png)$/', basename($file), $m)) { continue; }
+        if (!isset($used[$m[1]]) && filemtime($file) < time() - ICON_ORPHAN_GRACE) { @unlink($file); }
     }
+}
+
+// --- Búsqueda de productos en UPCitemdb (respaldo de Open Food Facts) ---
+// Open Food/Beauty/Products Facts casi no tienen productos de limpieza o de
+// cuidado personal de EE. UU.; UPCitemdb sí. Su API no permite consultas
+// directas desde el navegador (CORS), así que la hace el servidor. El plan
+// gratuito admite 100 consultas al día y no muy seguidas: cada código se
+// consulta una sola vez y la respuesta queda en data/products.json.
+// GROCMAN_UPC_URL / GROCMAN_ALLOW_PRIVATE_IMAGES solo se usan en las pruebas.
+$productCacheFile = __DIR__ . '/data/products.json';
+const PRODUCT_NOT_FOUND_TTL = 2592000; // un "no encontrado" se vuelve a consultar a los 30 días
+const PRODUCT_IMAGE_MAX_BYTES = 3000000;
+
+function upcLookupUrl() {
+    return (getenv('GROCMAN_UPC_URL') ?: 'https://api.upcitemdb.com/prod/trial/lookup') . '?upc=';
+}
+
+// Lee y modifica la caché de productos con bloqueo. $fn recibe la caché por referencia.
+function withProductCache(callable $fn) {
+    global $productCacheFile;
+    $cache = [];
+    $fh = @fopen($productCacheFile, 'c+');
+    if (!$fh || !flock($fh, LOCK_EX)) { return $fn($cache); }
+    $cache = json_decode(stream_get_contents($fh), true) ?: [];
+    $before = $cache;
+    $result = $fn($cache);
+    if ($cache !== $before) {
+        ftruncate($fh, 0);
+        rewind($fh);
+        fwrite($fh, json_encode($cache, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        fflush($fh);
+    }
+    flock($fh, LOCK_UN);
+    fclose($fh);
+    return $result;
+}
+
+// Categoría de grocman a partir de la ruta de categorías de UPCitemdb
+// (p. ej. "Home & Garden > Household Supplies > Household Cleaning Supplies").
+function categoryFromUpc($category, $title) {
+    $t = strtolower($category . ' ' . $title);
+    $rules = [
+        'Limpieza' => '/clean|household|laundry|dish|detergent|bleach|disinfect|trash bag|paper towel|sponge/',
+        'Higiene' => '/personal care|health & beauty|bath|body wash|shampoo|conditioner|deodorant|toothpaste|oral care|soap|lotion|razor|shav|toilet paper/',
+        'Bebidas' => '/beverage|drink|juice|soda|water|coffee|tea/',
+        'Lácteos/Huevos' => '/dairy|milk|cheese|yogurt|egg/',
+        'Proteínas' => '/meat|poultry|chicken|beef|pork|fish|seafood/',
+        'Panadería' => '/bread|bakery|tortilla/',
+        'Frutas/Verduras' => '/fruit|vegetable|produce/',
+    ];
+    foreach ($rules as $cat => $re) { if (preg_match($re, $t)) { return $cat; } }
+    return preg_match('/food|grocery|snack|pantry/', $t) ? 'Despensa' : 'Otros';
+}
+
+function httpGet($url, $maxBytes) {
+    $ch = curl_init($url);
+    $body = '';
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => false,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_TIMEOUT => 8,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_USERAGENT => 'grocman/1.0 (lista de compra personal)',
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+        CURLOPT_HTTPHEADER => ['Accept: application/json, image/*'],
+        // Corta la descarga si pasa del límite.
+        CURLOPT_WRITEFUNCTION => function ($ch, $chunk) use (&$body, $maxBytes) {
+            $body .= $chunk;
+            return strlen($body) > $maxBytes ? 0 : strlen($chunk);
+        },
+    ]);
+    $ok = curl_exec($ch);
+    $res = [
+        'ok' => $ok !== false,
+        'status' => curl_getinfo($ch, CURLINFO_HTTP_CODE),
+        'type' => (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE),
+        'location' => (string)curl_getinfo($ch, CURLINFO_REDIRECT_URL),
+        'body' => $body,
+    ];
+    curl_close($ch);
+    return $res;
+}
+
+// Consulta un código en UPCitemdb (o en la caché). Devuelve la entrada de caché.
+function lookupProduct($code) {
+    return withProductCache(function (&$cache) use ($code) {
+        $hit = $cache[$code] ?? null;
+        if ($hit && ($hit['found'] || time() - $hit['t'] < PRODUCT_NOT_FOUND_TTL)) { return $hit; }
+        if (!function_exists('curl_init')) { fail(503, 'La búsqueda de productos no está disponible.'); }
+        $r = httpGet(upcLookupUrl() . $code, 500000);
+        $json = json_decode($r['body'], true);
+        if ($r['status'] === 429 || in_array($json['code'] ?? '', ['TOO_FAST', 'EXCEED_LIMIT'], true)) {
+            fail(503, 'La búsqueda de productos está ocupada; intenta en un momento.');
+        }
+        if (!$r['ok'] || !is_array($json) || ($json['code'] ?? '') !== 'OK') { fail(502, 'No se pudo consultar el producto.'); }
+        $item = $json['items'][0] ?? null;
+        $entry = ['t' => time(), 'found' => false];
+        if (is_array($item) && trim((string)($item['title'] ?? '')) !== '') {
+            $images = array_values(array_filter((array)($item['images'] ?? []), function ($u) {
+                return is_string($u) && preg_match('#^https?://#i', $u);
+            }));
+            $entry = [
+                't' => time(),
+                'found' => true,
+                'title' => trim(preg_replace('/\s+/', ' ', (string)$item['title'])),
+                'brand' => trim((string)($item['brand'] ?? '')),
+                'category' => categoryFromUpc((string)($item['category'] ?? ''), (string)$item['title']),
+                'images' => array_slice($images, 0, 3),
+            ];
+        }
+        $cache[$code] = $entry;
+        return $entry;
+    });
+}
+
+// ¿La URL apunta a un servidor público? (evita que el proxy de fotos se use
+// para llegar a la red interna del hosting).
+function publicHttpUrl($url) {
+    $p = parse_url($url);
+    if (!$p || !in_array(strtolower($p['scheme'] ?? ''), ['http', 'https'], true) || empty($p['host'])) { return false; }
+    if (getenv('GROCMAN_ALLOW_PRIVATE_IMAGES')) { return true; }
+    $ips = @gethostbynamel($p['host']) ?: [];
+    if (!$ips) { return false; }
+    foreach ($ips as $ip) {
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) { return false; }
+    }
+    return true;
+}
+
+// Foto del producto de UPCitemdb, a través del servidor (esas fotos vienen de
+// sitios de tiendas sin CORS). Solo sirve URLs que UPCitemdb devolvió para ese
+// código, nunca una URL arbitraria.
+function serveProductImage($code) {
+    $entry = withProductCache(function (&$cache) use ($code) { return $cache[$code] ?? null; });
+    if (!$entry || empty($entry['images'])) { fail(404, 'El producto no tiene foto.'); }
+    foreach ($entry['images'] as $url) {
+        for ($hops = 0; $hops < 3 && $url; $hops++) { // redirecciones, validando cada destino
+            if (!publicHttpUrl($url)) { break; }
+            $r = httpGet($url, PRODUCT_IMAGE_MAX_BYTES);
+            if ($r['status'] >= 300 && $r['status'] < 400 && $r['location']) { $url = $r['location']; continue; }
+            $info = $r['ok'] && $r['status'] === 200 ? @getimagesizefromstring($r['body']) : false;
+            if ($info && in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP, IMAGETYPE_GIF], true)) {
+                session_write_close();
+                header('Content-Type: ' . $info['mime']);
+                header('Content-Length: ' . strlen($r['body']));
+                header('X-Content-Type-Options: nosniff');
+                header("Content-Security-Policy: default-src 'none'; sandbox");
+                header('Cache-Control: private, max-age=86400');
+                echo $r['body'];
+                exit();
+            }
+            break;
+        }
+    }
+    fail(404, 'No se pudo obtener la foto del producto.');
 }
 
 // Bloqueo exclusivo durante todo el ciclo leer → comprobar versión → escribir,
@@ -213,6 +394,16 @@ function cleanItems($items) {
             'price' => round((float)$price, 2),
         ];
         if ($barcodes) { $clean['barcodes'] = $barcodes; }
+        // Lista: 'regular' (se repone; no se guarda el campo) o 'once' (compra de una vez).
+        $list = $it['list'] ?? 'regular';
+        if (!in_array($list, LISTS, true)) { return null; }
+        if ($list === 'once') { $clean['list'] = 'once'; }
+        // Nivel en casa (0–100, de 10 en 10); ausente = sin seguimiento.
+        if (isset($it['level'])) {
+            $level = filter_var($it['level'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100]]);
+            if ($level === false || $level % 10 !== 0) { return null; }
+            $clean['level'] = $level;
+        }
         // Imagen: solo se conserva si apunta a un archivo existente.
         if (iconIdValid($it['icon'] ?? null) && is_file(iconPath($it['icon']))) { $clean['icon'] = $it['icon']; }
         $out[] = $clean;
@@ -223,7 +414,17 @@ function cleanItems($items) {
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
-    if (isset($_GET['icon'])) { serveIcon($_GET['icon']); }
+    if (isset($_GET['icon'])) { serveIcon($_GET['icon'], ($_GET['size'] ?? '') === 'l'); }
+    if (isset($_GET['lookup']) || isset($_GET['productImage'])) {
+        $code = normalizeBarcode((string)($_GET['lookup'] ?? $_GET['productImage']));
+        if ($code === null) { fail(400, 'Código de barras inválido.'); }
+        if (isset($_GET['productImage'])) { serveProductImage($code); }
+        $p = lookupProduct($code);
+        echo json_encode($p['found']
+            ? ['found' => true, 'name' => $p['title'], 'brand' => $p['brand'], 'category' => $p['category'], 'hasImage' => !empty($p['images'])]
+            : ['found' => false]);
+        exit();
+    }
     echo json_encode(getDB());
     exit();
 }
@@ -236,7 +437,7 @@ if ($method === 'POST') {
 
     // Subida de la imagen de un artículo (no toca la lista)
     if (is_array($input) && isset($input['iconUpload'])) {
-        echo json_encode(['status' => 'success', 'icon' => saveIcon($input['iconUpload'])]);
+        echo json_encode(['status' => 'success', 'icon' => saveIcon($input['iconUpload'], $input['iconLarge'] ?? null)]);
         exit();
     }
     if (!is_array($input) || !isset($input['version']) || !is_numeric($input['version'])) { fail(400, 'Datos de entrada inválidos.'); }

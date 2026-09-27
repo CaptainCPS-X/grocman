@@ -129,6 +129,10 @@ if (!isAuthenticated()) {
         <div id="view-inventory" class="view hidden">
             <div id="inventory-list-render"></div>
         </div>
+
+        <div id="view-once" class="view hidden">
+            <div id="once-list-render"></div>
+        </div>
     </div>
 
     <!-- Barra de total (solo en Lista) -->
@@ -153,6 +157,10 @@ if (!isAuthenticated()) {
         <button class="bn-item" data-view="inventory" onclick="app.setTab('inventory')">
             <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
             <span class="bn-label">Inventario</span>
+        </button>
+        <button class="bn-item" data-view="once" onclick="app.setTab('once')">
+            <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+            <span class="bn-label">Una vez</span>
         </button>
         <button class="bn-item" onclick="app.openAddSheet()">
             <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
@@ -193,6 +201,13 @@ if (!isAuthenticated()) {
                 <select id="new-cat"><?php echo catOptions(CATS); ?></select>
             </div>
             <div class="field">
+                <span class="field-label" id="new-list-label">Lista</span>
+                <div class="seg" id="new-list" role="radiogroup" aria-labelledby="new-list-label">
+                    <button type="button" class="seg-opt" role="radio" data-list="regular">Regular <span class="seg-sub">se repone</span></button>
+                    <button type="button" class="seg-opt" role="radio" data-list="once">Una vez</button>
+                </div>
+            </div>
+            <div class="field">
                 <label for="new-price">Precio <span class="opt">(opcional)</span></label>
                 <input type="number" id="new-price" placeholder="0.00" step="0.01" inputmode="decimal">
             </div>
@@ -217,6 +232,23 @@ if (!isAuthenticated()) {
             <div class="field">
                 <label for="edit-cat">Categoría</label>
                 <select id="edit-cat"><?php echo catOptions(CATS); ?></select>
+            </div>
+            <div class="field">
+                <span class="field-label" id="edit-list-label">Lista</span>
+                <div class="seg" id="edit-list" role="radiogroup" aria-labelledby="edit-list-label">
+                    <button type="button" class="seg-opt" role="radio" data-list="regular">Regular <span class="seg-sub">se repone</span></button>
+                    <button type="button" class="seg-opt" role="radio" data-list="once">Una vez</button>
+                </div>
+            </div>
+            <div class="field" id="edit-level-field">
+                <div class="level-head">
+                    <span class="field-label" id="edit-level-label">Cuánto queda en casa</span>
+                    <label class="switch"><input type="checkbox" id="edit-level-on"><span class="switch-ui" aria-hidden="true"></span><span class="switch-text">Medir</span></label>
+                </div>
+                <div class="level-control" id="edit-level-control">
+                    <input type="range" id="edit-level" min="0" max="100" step="10" value="100" aria-labelledby="edit-level-label">
+                    <output id="edit-level-out" for="edit-level" class="level-out">100%</output>
+                </div>
             </div>
             <div class="field">
                 <label for="edit-price">Precio <span class="opt">(opcional)</span></label>
@@ -247,6 +279,29 @@ if (!isAuthenticated()) {
                 <button type="submit" class="btn-primary">Guardar</button>
             </div>
         </form>
+    </div>
+
+    <!-- Sheet: ajustar cuánto queda -->
+    <div id="level-sheet" class="sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="level-sheet-title">
+        <div class="sheet-handle"></div>
+        <h3 class="sheet-title" id="level-sheet-title">¿Cuánto queda?</h3>
+        <form class="form" onsubmit="app.saveLevel(event)">
+            <input type="hidden" id="level-name">
+            <output id="level-out" class="level-big" for="level-range">50%</output>
+            <input type="range" id="level-range" class="level-range-big" min="0" max="100" step="10" aria-labelledby="level-sheet-title">
+            <div class="level-ticks" aria-hidden="true"><span>0%</span><span>50%</span><span>100%</span></div>
+            <div class="form-actions">
+                <button type="button" class="btn-secondary" onclick="app.closeSheets()">Cancelar</button>
+                <button type="submit" class="btn-primary">Guardar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Vista previa de la imagen de un artículo -->
+    <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-caption" hidden onclick="app.closeLightbox()">
+        <button type="button" class="lightbox-close" aria-label="Cerrar vista previa"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        <img id="lightbox-img" alt="">
+        <p id="lightbox-caption" class="lightbox-caption"></p>
     </div>
 
     <!-- Escáner de códigos de barras -->

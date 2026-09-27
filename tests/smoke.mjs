@@ -3,6 +3,7 @@
 // Copia src/ a una carpeta temporal con datos de ejemplo y una contraseña de
 // prueba, levanta `php -S` y ejercita la API. Nunca toca src/data/items.json.
 import { spawn, execFileSync } from 'node:child_process';
+import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,7 +29,33 @@ fs.copyFileSync(path.join(SRC, 'data', 'items.sample.json'), DATA);
 const hash = execFileSync('php', ['-r', `echo password_hash('${PASSWORD}', PASSWORD_DEFAULT);`]).toString();
 fs.writeFileSync(path.join(WEB, 'auth.php'), `<?php $stored_hash = '${hash}';`);
 
-const server = spawn('php', ['-S', `127.0.0.1:${PORT}`, '-t', WEB], { stdio: 'ignore' });
+// --- UPCitemdb falso (la API real no se consulta en las pruebas) ---
+const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const UPC_PORT = PORT + 1000;
+const UPC = `http://127.0.0.1:${UPC_PORT}`;
+const upcCalls = {};
+const upcServer = http.createServer((req, res) => {
+    const url = new URL(req.url, UPC);
+    const json = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+    if (url.pathname === '/lookup') {
+        const upc = url.searchParams.get('upc');
+        upcCalls[upc] = (upcCalls[upc] || 0) + 1;
+        if (upc === '0037000222057') return json(200, { code: 'OK', total: 1, items: [{ ean: upc, title: 'Dawn  Liquid Dish Soap  Original Scent', brand: 'Dawn', category: 'Home & Garden > Household Supplies > Household Cleaning Supplies', images: [`${UPC}/redir`, 'ftp://no-valida/x.jpg'] }] });
+        if (upc === '0011111396487') return json(200, { code: 'OK', total: 1, items: [{ ean: upc, title: 'Dove Body Wash', brand: 'Dove', category: 'Health & Beauty > Personal Care > Bath & Body', images: [] }] });
+        if (upc === '0078742351865') return json(429, { code: 'TOO_FAST', message: 'slow down' });
+        return json(200, { code: 'OK', total: 0, items: [] });
+    }
+    if (url.pathname === '/redir') { res.writeHead(302, { Location: `${UPC}/img.png` }); return res.end(); }
+    if (url.pathname === '/img.png') { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(Buffer.from(PNG_1PX.split(',')[1], 'base64')); }
+    res.writeHead(404); res.end();
+}).listen(UPC_PORT, '127.0.0.1');
+
+// curl hace falta para la búsqueda de productos (en DreamHost ya viene cargado).
+const phpArgs = (port) => ['-d', 'extension=curl', '-S', `127.0.0.1:${port}`, '-t', WEB];
+const server = spawn('php', phpArgs(PORT), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '1' } });
+// Segundo servidor SIN permiso de pruebas: el proxy de fotos debe bloquear direcciones internas.
+const PORT2 = PORT + 500;
+const server2 = spawn('php', phpArgs(PORT2), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '' } });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // --- Mini cliente HTTP con cookies ---
@@ -124,7 +151,6 @@ try {
     check('lista de productos vacía no se guarda como campo', !('barcodes' in readData().items[0]));
 
     console.log('Imágenes de los artículos');
-    const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
     const ICONS = path.join(DATA_DIR, 'icons');
     const up = await post({ iconUpload: PNG_1PX });
     const iconId = up.json?.icon;
@@ -142,6 +168,43 @@ try {
     for (const idx of [iconId, orphan]) fs.utimesSync(path.join(ICONS, `${idx}.png`), old, old);
     await post({ version: v(), items: [item({ name: 'Leche', icon: iconId })] });
     check('al guardar se borran las imágenes huérfanas (>1h) y se conserva la usada', !fs.existsSync(path.join(ICONS, `${orphan}.png`)) && fs.existsSync(path.join(ICONS, `${iconId}.png`)));
+
+    console.log('Imagen grande (vista previa)');
+    const JPEG = 'data:image/jpeg;base64,' + execFileSync('php', ['-d', 'extension=gd', '-r', '$i = imagecreatetruecolor(300, 200); ob_start(); imagejpeg($i); echo base64_encode(ob_get_clean());']).toString();
+    const both = await post({ iconUpload: PNG_1PX, iconLarge: JPEG });
+    const bothId = both.json?.icon;
+    check('subir miniatura + versión grande → 200', both.status === 200 && fs.existsSync(path.join(ICONS, `${bothId}.png`)) && fs.existsSync(path.join(ICONS, `${bothId}-l.jpg`)), both.text);
+    const big = await fetch(`${BASE}/api.php?icon=${bothId}&size=l`, { headers: { Cookie: cookieHeader() } });
+    check('servir versión grande → image/jpeg', big.status === 200 && big.headers.get('content-type') === 'image/jpeg');
+    check('versión grande que no es JPEG → 400', (await post({ iconUpload: PNG_1PX, iconLarge: PNG_1PX.replace('image/png', 'image/jpeg') })).status === 400);
+    for (const f of [`${bothId}.png`, `${bothId}-l.jpg`]) fs.utimesSync(path.join(ICONS, f), old, old);
+    await post({ version: v(), items: [item({ name: 'Leche', icon: iconId })] });
+    check('las huérfanas se borran en los dos tamaños', !fs.existsSync(path.join(ICONS, `${bothId}.png`)) && !fs.existsSync(path.join(ICONS, `${bothId}-l.jpg`)));
+
+    console.log('Listas y nivel');
+    const r1 = await post({ version: v(), items: [item({ name: 'Escurridor', list: 'once' }), item({ name: 'Azúcar', level: 40 }), item({ name: 'Sal', list: 'regular' })] });
+    const saved2 = readData().items;
+    check('lista "once" y nivel se guardan; "regular" no guarda el campo', r1.status === 200 && saved2[0].list === 'once' && saved2[1].level === 40 && !('list' in saved2[2]) && !('level' in saved2[2]), JSON.stringify(saved2));
+    check('lista inválida → 400', (await post({ version: v(), items: [item({ list: 'otra' })] })).status === 400);
+    check('nivel que no es múltiplo de 10 → 400', (await post({ version: v(), items: [item({ level: 45 })] })).status === 400);
+    check('nivel fuera de 0–100 → 400', (await post({ version: v(), items: [item({ level: 110 })] })).status === 400);
+
+    console.log('Búsqueda de productos (UPCitemdb falso)');
+    const dawn = await request('/api.php?lookup=037000222057');
+    check('producto encontrado: nombre limpio, categoría Limpieza, con foto', dawn.status === 200 && dawn.json?.found && dawn.json.name === 'Dawn Liquid Dish Soap Original Scent' && dawn.json.category === 'Limpieza' && dawn.json.hasImage === true, dawn.text);
+    await request('/api.php?lookup=0037000222057');
+    check('segunda consulta sale de la caché (UPCitemdb se consultó 1 vez)', upcCalls['0037000222057'] === 1, JSON.stringify(upcCalls));
+    check('Dove → Higiene', (await request('/api.php?lookup=011111396487')).json?.category === 'Higiene');
+    const photo = await fetch(`${BASE}/api.php?productImage=0037000222057`, { headers: { Cookie: cookieHeader() } });
+    check('foto del producto por el servidor (sigue la redirección) → image/png', photo.status === 200 && photo.headers.get('content-type') === 'image/png');
+    check('producto sin foto → 404', (await request('/api.php?productImage=011111396487')).status === 404);
+    const photo2 = await fetch(`http://127.0.0.1:${PORT2}/api.php?productImage=0037000222057`, { headers: { Cookie: cookieHeader() } });
+    check('sin permiso de pruebas, una foto en dirección interna se bloquea → 404', photo2.status === 404, String(photo2.status));
+    const none = await request('/api.php?lookup=4006381333931');
+    check('no encontrado → found:false y se recuerda', none.json?.found === false && (await request('/api.php?lookup=4006381333931')).json?.found === false && upcCalls['4006381333931'] === 1);
+    check('UPCitemdb ocupado → 503 y NO se recuerda', (await request('/api.php?lookup=0078742351865')).status === 503 && (await request('/api.php?lookup=0078742351865')).status === 503 && upcCalls['0078742351865'] === 2);
+    check('código inválido → 400', (await request('/api.php?lookup=123')).status === 400);
+    check('búsqueda sin sesión → 401', (await fetch(`${BASE}/api.php?lookup=037000222057`)).status === 401);
 
     console.log('Guardados simultáneos (misma versión)');
     const base = v();
@@ -166,6 +229,8 @@ try {
     check('tras 5 fallos, ni la contraseña correcta entra', locked.status === 200 && /Demasiados intentos/.test(locked.text));
 } finally {
     server.kill();
+    server2.kill();
+    upcServer.close();
     await sleep(200);
     fs.rmSync(TMP, { recursive: true, force: true });
 }

@@ -9,9 +9,16 @@ archivo JSON plano.
 - **Lista de compra:** los artículos por comprar, agrupados por categoría.
   Tocar un artículo lo pasa al **carrito** (✓); "Finalizar compra" mueve el
   carrito al inventario. Muestra el total y el subtotal del carrito.
-- **Inventario:** todos los artículos con su categoría y precio. Marca
-  "Ya tengo" / "+ Pedir" para mover entre en casa (`stocked`) y por comprar
-  (`needed`). Alta, edición y borrado.
+- **Inventario:** los artículos que se reponen, con su categoría y precio.
+  Marca "Ya tengo" / "+ Pedir" para mover entre en casa (`stocked`) y por
+  comprar (`needed`). Alta, edición y borrado. Si se mide **cuánto queda**
+  (Editar → "Medir", de 10 en 10 %), se ve una barrita con borde animado
+  (verde / ámbar / rojo); tocarla abre un ajuste rápido. Al comprar el
+  artículo vuelve a 100 %.
+- **Una vez:** compras que no se reponen (un escurridor, etc.). Mientras están
+  por comprar aparecen también en la lista normal con la etiqueta "Una vez";
+  al finalizar la compra quedan guardadas aquí para volver a pedirlas. Un
+  artículo cambia de lista desde Editar → "Lista".
 
 Cada artículo tiene un estado: `needed` (por comprar) → `in_cart` (en el
 carrito) → `stocked` (en casa).
@@ -31,14 +38,23 @@ código de barras (p. ej. "Leche" → galón Horizon, galón Great Value). En
 - El nombre del producto se busca en **Open Food Facts** (y, si no está, en Open
   Beauty Facts y Open Products Facts) directamente desde el navegador; solo se
   envía el número del código. En *Agregar* rellena el nombre y la categoría.
+- Si no está en ninguna (casi siempre: limpieza y cuidado personal), el
+  servidor consulta **UPCitemdb** (`api.php?lookup=<código>`; su API no permite
+  CORS). Plan gratuito: 100 consultas/día, así que cada código se consulta una
+  sola vez y la respuesta queda en `data/products.json`. Sus fotos se sirven a
+  través del servidor (`api.php?productImage=<código>`), solo las URL que
+  UPCitemdb devolvió para ese código y solo hacia servidores públicos.
+- El nombre del producto se puede escribir o corregir en su ficha.
 
 ### Imágenes de los artículos
 
 Cada artículo puede tener una imagen (`[imagen] Leche` en la lista y el
-inventario); sin imagen se muestra el icono de su categoría. Se sube desde
+inventario); sin imagen se muestra el icono de su categoría. Tocar la imagen
+la muestra en grande (vista previa). Se sube desde
 *Agregar* / *Editar* (galería o cámara) o, al escanear un producto, se usa su
-foto de Open Food Facts si el artículo aún no tiene imagen. El teléfono la
-ajusta a 128×128 y la sube como PNG a `data/icons/<id>.png`; se sirve solo con
+foto del producto si el artículo aún no tiene imagen. El teléfono la ajusta
+a 128×128 (PNG, `data/icons/<id>.png`) y a 640 px (JPEG, `<id>-l.jpg`, para la
+vista previa); se sirve solo con
 sesión (`api.php?icon=<id>`). Las imágenes que ningún artículo usa se borran
 solas tras 1 h. No entran en el backup diario de `items.json`.
 
