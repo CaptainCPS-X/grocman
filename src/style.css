@@ -423,7 +423,7 @@ body {
 }
 .item-thumb .lucide { width: 20px; height: 20px; }
 .item-thumb.has-img { background: #fff; border: 1px solid rgba(0, 0, 0, 0.07); }
-.item-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.item-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; } /* llena el cuadro */
 .inv-main { display: flex; align-items: center; gap: 11px; }
 .inv-main .item-thumb { width: 36px; height: 36px; border-radius: 10px; }
 .inv-main .item-thumb .lucide { width: 18px; height: 18px; }
@@ -439,7 +439,7 @@ body {
 }
 .ip-preview .lucide { width: 22px; height: 22px; }
 .ip-preview.has-img { border: 1px solid rgba(0, 0, 0, 0.08); background: #fff; }
-.ip-preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.ip-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ip-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .ip-upload, .ip-remove {
     position: relative; display: inline-flex; align-items: center;
@@ -590,3 +590,91 @@ body {
     .lv-track::after { animation: none; }
     .lightbox { animation: none; }
 }
+
+/* ===================================================================== */
+/* --- Filas en rejilla (como en payman) y categorías plegables ---      */
+/* ===================================================================== */
+/* Nombre arriba a todo el ancho (desde encima de la miniatura, hasta 2
+   líneas); debajo miniatura + detalle + precio en su propia columna. */
+.row-main.item-main, .row-main.inv-main {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    grid-template-areas: "name name name" "thumb detail price";
+    column-gap: 11px; row-gap: 6px; align-items: center;
+    flex: 1; min-width: 0; cursor: pointer;
+}
+.row-name { grid-area: name; display: flex; align-items: flex-start; gap: 6px; min-width: 0; font-size: 15px; font-weight: 700; color: #212529; line-height: 1.25; }
+.row-name-text { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.row-name .once-badge { margin-left: 0; flex-shrink: 0; vertical-align: 0; }
+.row-main .item-thumb { grid-area: thumb; }
+.row-detail { grid-area: detail; min-width: 0; }
+.row-detail:empty { min-height: 1px; }
+.row-detail .item-note, .row-detail .inv-cat { margin-top: 0; font-size: 12.5px; color: #868e96; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-detail .level-bar { margin-top: 4px; }
+.row-price { grid-area: price; font-size: 14px; font-weight: 700; color: #1a7431; white-space: nowrap; text-align: right; }
+.item-row.in-cart .row-name { text-decoration: line-through; color: #98a2ac; }
+.item-row.in-cart .row-price { color: #9fb3d1; }
+.inv-item.stocked .row-name { color: #495057; }
+/* En casa / por comprar: punto de color en la esquina de la miniatura. */
+.inv-main .item-thumb { position: relative; overflow: visible; }
+.inv-main .item-thumb::after {
+    content: ''; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--primary); border: 2px solid #fff;
+}
+.inv-item.stocked .inv-main .item-thumb::after { background: var(--success); }
+.inv-main .item-thumb.has-img img { border-radius: 9px; }
+.inv-item .inv-status { display: none; }
+
+/* Categoría plegable */
+.category-group > summary { list-style: none; cursor: pointer; user-select: none; }
+.category-group > summary::-webkit-details-marker { display: none; }
+.cat-header .cat-chevron { width: 15px; height: 15px; margin-left: auto; color: #adb5bd; transition: transform 0.2s ease; }
+.category-group:not([open]) .cat-chevron { transform: rotate(-90deg); }
+.category-group:not([open]) { margin-bottom: 6px; }
+.category-group > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 8px; }
+.view-tools { display: flex; justify-content: flex-end; margin: -4px 0 8px; }
+.collapse-all {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: none; border-radius: 16px; cursor: pointer;
+    background: rgba(0, 0, 0, 0.05); color: #495057; font-size: 12.5px; font-weight: 600; font-family: inherit;
+}
+.collapse-all .lucide { width: 15px; height: 15px; }
+.collapse-all:hover { background: rgba(0, 0, 0, 0.09); }
+.collapse-all:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Selector de imagen: cámara / subir / recortar */
+.ip-btn { gap: 6px; }
+.ip-btn .lucide { width: 18px; height: 18px; }
+.ip-camera, .ip-crop {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 38px; padding: 0; border: none; border-radius: 11px; cursor: pointer;
+    background: rgba(0, 123, 255, 0.10); color: var(--primary-dark);
+}
+.ip-camera:hover, .ip-crop:hover { background: rgba(0, 123, 255, 0.18); }
+.ip-camera:focus-within, .ip-crop:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.ip-crop[hidden] { display: none; }
+.form .ip-camera input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; font-size: 0; }
+
+/* Recortador (pantalla completa, como el escáner) */
+.cropper {
+    position: fixed; inset: 0; z-index: 3000; display: flex; flex-direction: column;
+    background: #0b0f19; color: #fff; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.cropper[hidden] { display: none; }
+.crop-area { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px 16px; }
+.crop-stage {
+    position: relative; width: min(88vw, 60vh, 420px); aspect-ratio: 1; overflow: hidden;
+    border-radius: 18px; background: #1b2130; touch-action: none; cursor: grab;
+}
+.crop-stage:active { cursor: grabbing; }
+.crop-stage:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.crop-stage img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+.crop-frame { position: absolute; inset: 0; border: 2px solid rgba(255, 255, 255, 0.9); border-radius: 18px; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.crop-controls { display: flex; align-items: center; gap: 12px; padding: 4px 24px; }
+.crop-zoom-label { font-size: 13px; color: rgba(255, 255, 255, 0.75); }
+.crop-controls input[type=range] { flex: 1; accent-color: #fff; }
+.crop-actions { display: flex; gap: 10px; padding: 8px 16px 18px; }
+.crop-actions button { flex: 1; padding: 13px; border: none; border-radius: 13px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.crop-cancel { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.crop-use { background: var(--primary); color: #fff; }
+.crop-actions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.ip-crop[aria-disabled="true"], .ip-remove[aria-disabled="true"] { opacity: 0.45; cursor: progress; }

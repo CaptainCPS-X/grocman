@@ -6,6 +6,9 @@ const app = {
         check: '<polyline points="20 6 9 17 4 12"/>',
         cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
         image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+        chevron: '<path d="m6 9 6 6 6-6"/>',
+        collapse: '<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>',
+        expand: '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
         flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
         barcode: '<path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -59,6 +62,8 @@ const app = {
         document.addEventListener('keydown', app.onSheetKeydown);
         document.querySelector('.scanner-view').addEventListener('click', app.focusAt);
         app.iconPickers = { new: app.makeIconPicker('new'), edit: app.makeIconPicker('edit') };
+        ['shopping-list-render', 'inventory-list-render'].forEach(id => document.getElementById(id).addEventListener('toggle', app.onGroupToggle, true));
+        app.initCropper();
         document.getElementById('once-list-render').addEventListener('click', app.onOnceClick);
         document.getElementById('once-list-render').addEventListener('keydown', (e) => {
             if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) { e.preventDefault(); e.target.click(); }
@@ -239,42 +244,95 @@ const app = {
             return;
         }
 
-        const groups = activeItems.reduce((acc, item) => {
-            (acc[item.category] = acc[item.category] || []).push(item);
-            return acc;
-        }, {});
-
-        let html = '';
-        for (const [cat, items] of Object.entries(groups)) {
-            html += `<div class="category-group">
-                <div class="cat-header">${app.catIcon(cat)}<span>${app.esc(cat)}</span><span class="cat-count">· ${items.length}</span></div>`;
-
+        const groups = app.byCategory(activeItems);
+        let html = app.toolsHTML('shopping', groups.map(g => g.cat));
+        for (const { cat, items } of groups) {
             // Los que están en el carrito van al final de su categoría
             items.sort((a, b) => (a.status === b.status ? 0 : (a.status === 'in_cart' ? 1 : -1)));
-
-            items.forEach(item => {
+            html += app.groupHTML('shopping', cat, items.length, items.map(item => {
                 const isInCart = item.status === 'in_cart';
                 const name = app.esc(item.name);
-                const price = item.price > 0 ? `<span class="item-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
-                html += `
+                const detail = (item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : '') + app.levelBarHTML(item);
+                return `
                 <div class="item-row ${isInCart ? 'in-cart' : ''}" data-name="${name}">
-                    <div class="item-main" role="button" tabindex="0" aria-label="Editar ${name}">
-                        ${app.thumbHTML(item)}
-                        <div class="item-text">
-                            <div class="item-name">${name}${price}${app.isOnce(item) ? '<span class="once-badge">Una vez</span>' : ''}</div>
-                            ${item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : ''}
-                            ${app.levelBarHTML(item)}
-                        </div>
-                    </div>
+                    ${app.rowMainHTML(item, 'item-main', detail, app.isOnce(item) ? '<span class="once-badge">Una vez</span>' : '')}
                     <button type="button" class="check-circle ${isInCart ? 'in-cart' : ''}" aria-pressed="${isInCart}" aria-label="${isInCart ? 'Sacar del carrito' : 'Poner en el carrito'}: ${name}">${app.svgIcon('check')}</button>
                 </div>`;
-            });
-            html += `</div>`;
+            }).join(''));
         }
         container.innerHTML = html;
     },
 
+    // --- FILAS Y CATEGORÍAS (compartido por Lista, Inventario y Una vez) ---
+    // Área editable de una fila: rejilla con el nombre arriba a todo el ancho
+    // (empieza encima de la miniatura, hasta 2 líneas) y debajo miniatura +
+    // detalle (nota, productos, nivel) + precio en su propia columna, así un
+    // nombre largo nunca se monta sobre el precio.
+    rowMainHTML: (item, cls, detail, badge = '') => {
+        const name = app.esc(item.name);
+        const price = item.price > 0 ? `<span class="row-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
+        return `<div class="row-main ${cls}" role="button" tabindex="0" aria-label="Editar ${name}">
+                        <div class="row-name"><span class="row-name-text">${name}</span>${badge}</div>
+                        ${app.thumbHTML(item)}
+                        <div class="row-detail">${detail}</div>
+                        ${price}
+                    </div>`;
+    },
+
+    // Categorías en el orden del selector (el de config.php); las desconocidas al final.
+    catOrder: () => app._catOrder || (app._catOrder = [...document.querySelectorAll('#new-cat option')].map(o => o.value)),
+    byCategory: (items) => {
+        const map = new Map();
+        for (const it of items) { if (!map.has(it.category)) map.set(it.category, []); map.get(it.category).push(it); }
+        const order = app.catOrder();
+        const rank = (c) => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
+        return [...map.entries()].sort((a, b) => rank(a[0]) - rank(b[0])).map(([cat, items]) => ({ cat, items }));
+    },
+
+    // Categorías plegadas, por vista ({ 'shopping|Despensa': true }). Se recuerdan
+    // en el teléfono y sobreviven a los redibujos del poll.
+    COLLAPSE_KEY: 'grocman.collapsed',
+    collapsed: (() => { try { return JSON.parse(localStorage.getItem('grocman.collapsed')) || {}; } catch (e) { return {}; } })(),
+    saveCollapsed: () => { try { localStorage.setItem(app.COLLAPSE_KEY, JSON.stringify(app.collapsed)); } catch (e) { } },
+    groupHTML: (view, cat, count, inner) => `
+        <details class="category-group" data-view="${view}" data-cat="${app.esc(cat)}" ${app.collapsed[view + '|' + cat] ? '' : 'open'}>
+            <summary class="cat-header">${app.catIcon(cat)}<span>${app.esc(cat)}</span><span class="cat-count">· ${count}</span>${app.svgIcon('chevron', 'lucide cat-chevron')}</summary>
+            <div class="cat-items">${inner}</div>
+        </details>`,
+    // "Contraer todo" / "Expandir todo" según el estado actual de la vista.
+    toolsHTML: (view, cats) => {
+        const allClosed = cats.length > 0 && cats.every(c => app.collapsed[view + '|' + c]);
+        return `<div class="view-tools"><button type="button" class="collapse-all" data-view="${view}" data-open="${allClosed}">${app.svgIcon(allClosed ? 'expand' : 'collapse')}${allClosed ? 'Expandir todo' : 'Contraer todo'}</button></div>`;
+    },
+    // Abrir/cerrar una categoría (evento toggle, que no burbujea: se escucha en captura).
+    onGroupToggle: (e) => {
+        const d = e.target;
+        if (!d.matches || !d.matches('details.category-group')) return;
+        const k = d.dataset.view + '|' + d.dataset.cat;
+        if (d.open) delete app.collapsed[k]; else app.collapsed[k] = true;
+        app.saveCollapsed();
+        const btn = d.closest('[id$="-list-render"]').querySelector('.collapse-all');
+        const groups = [...d.parentElement.querySelectorAll('details.category-group')];
+        if (btn) {
+            const allClosed = groups.every(g => !g.open);
+            btn.dataset.open = String(allClosed);
+            btn.innerHTML = app.svgIcon(allClosed ? 'expand' : 'collapse') + (allClosed ? 'Expandir todo' : 'Contraer todo');
+        }
+    },
+    toggleAll: (btn) => {
+        const open = btn.dataset.open === 'true';
+        const container = btn.closest('[id$="-list-render"]');
+        container.querySelectorAll('details.category-group').forEach(d => {
+            const k = d.dataset.view + '|' + d.dataset.cat;
+            if (open) delete app.collapsed[k]; else app.collapsed[k] = true;
+        });
+        app.saveCollapsed();
+        app.render();
+    },
+
     onShoppingClick: (e) => {
+        const all = e.target.closest('.collapse-all');
+        if (all) { app.toggleAll(all); return; }
         const row = e.target.closest('.item-row');
         if (!row) return;
         const name = row.dataset.name;
@@ -292,39 +350,38 @@ const app = {
             container.innerHTML = '<div class="view-empty">Sin artículos aún</div>';
             return;
         }
-        const sorted = regular.sort((a, b) => {
-            const aActive = (a.status === 'needed' || a.status === 'in_cart');
-            const bActive = (b.status === 'needed' || b.status === 'in_cart');
-            if (aActive === bActive) return a.name.localeCompare(b.name);
-            return aActive ? -1 : 1;
-        });
-
-        let html = '';
-        sorted.forEach(item => {
-            const isNeeded = (item.status === 'needed' || item.status === 'in_cart');
-            const name = app.esc(item.name);
-            const price = item.price > 0 ? `<span class="inv-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
-            html += `
-            <div class="inv-item ${item.status === 'stocked' ? 'stocked' : 'needed'}" data-name="${name}">
-                <span class="inv-status"></span>
-                <div class="inv-main" role="button" tabindex="0" aria-label="Editar ${name}">
-                    ${app.thumbHTML(item)}
-                    <div class="inv-text">
-                    <div class="inv-name">${name}${price}</div>
-                    <div class="inv-cat">${app.esc(item.category)}${(item.barcodes || []).length ? ` · ${item.barcodes.length} producto${item.barcodes.length === 1 ? '' : 's'}` : ''}</div>
-                    ${app.levelBarHTML(item)}
+        const groups = app.byCategory(regular);
+        let html = app.toolsHTML('inventory', groups.map(g => g.cat));
+        for (const { cat, items } of groups) {
+            // Por comprar primero, luego en casa; alfabético dentro de cada uno.
+            items.sort((a, b) => {
+                const aActive = (a.status === 'needed' || a.status === 'in_cart');
+                const bActive = (b.status === 'needed' || b.status === 'in_cart');
+                if (aActive === bActive) return a.name.localeCompare(b.name);
+                return aActive ? -1 : 1;
+            });
+            html += app.groupHTML('inventory', cat, items.length, items.map(item => {
+                const isNeeded = (item.status === 'needed' || item.status === 'in_cart');
+                const name = app.esc(item.name);
+                const n = (item.barcodes || []).length;
+                // El estado (por comprar / en casa) ya lo dicen el punto de color y el botón.
+                const detail = (n ? `<div class="inv-cat">${n} producto${n === 1 ? '' : 's'}</div>` : '') + app.levelBarHTML(item);
+                return `
+                <div class="inv-item ${isNeeded ? 'needed' : 'stocked'}" data-name="${name}">
+                    ${app.rowMainHTML(item, 'inv-main', detail)}
+                    <div class="inv-actions">
+                        <button type="button" class="inv-toggle ${isNeeded ? 'tengo' : 'pedir'}" aria-label="${isNeeded ? 'Ya tengo' : 'Pedir'}: ${name}">${isNeeded ? 'Ya tengo' : '+ Pedir'}</button>
+                        <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
                     </div>
-                </div>
-                <div class="inv-actions">
-                    <button type="button" class="inv-toggle ${isNeeded ? 'tengo' : 'pedir'}" aria-label="${isNeeded ? 'Ya tengo' : 'Pedir'}: ${name}">${isNeeded ? 'Ya tengo' : '+ Pedir'}</button>
-                    <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
-                </div>
-            </div>`;
-        });
+                </div>`;
+            }).join(''));
+        }
         container.innerHTML = html;
     },
 
     onInventoryClick: (e) => {
+        const all = e.target.closest('.collapse-all');
+        if (all) { app.toggleAll(all); return; }
         const item = e.target.closest('.inv-item');
         if (!item) return;
         const name = item.dataset.name;
@@ -348,16 +405,9 @@ const app = {
         const row = (item) => {
             const pending = item.status !== 'stocked';
             const name = app.esc(item.name);
-            const price = item.price > 0 ? `<span class="inv-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
             return `
             <div class="inv-item ${pending ? 'needed' : 'stocked'}" data-name="${name}">
-                <div class="inv-main" role="button" tabindex="0" aria-label="Editar ${name}">
-                    ${app.thumbHTML(item)}
-                    <div class="inv-text">
-                        <div class="inv-name">${name}${price}</div>
-                        <div class="inv-cat">${app.esc(item.category)}${item.status === 'in_cart' ? ' · en el carrito' : ''}</div>
-                    </div>
-                </div>
+                ${app.rowMainHTML(item, 'inv-main', `<div class="inv-cat">${app.esc(item.category)}${item.status === 'in_cart' ? ' · en el carrito' : ''}</div>`)}
                 <div class="inv-actions">
                     <button type="button" class="inv-toggle ${pending ? 'tengo' : 'pedir'}" aria-label="${pending ? 'Ya lo tengo' : 'Pedir'}: ${name}">${pending ? 'Ya lo tengo' : '+ Pedir'}</button>
                     <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
@@ -958,7 +1008,9 @@ const app = {
     // transparente) y se suben como PNG; el artículo guarda solo el id que
     // devuelve el servidor (data/icons/, visible solo con sesión).
     ICON_SIZE: 128,
-    iconURL: (id) => `api.php?icon=${encodeURIComponent(id)}`,
+    // v=2: las miniaturas pasaron a llenar el cuadro (recorte centrado); cambiar la
+    // versión obliga al navegador a pedirlas de nuevo pese a su caché "immutable".
+    iconURL: (id) => `api.php?icon=${encodeURIComponent(id)}&v=2`,
 
     // Miniatura de un artículo: su imagen o, si no tiene, el icono de su categoría.
     thumbHTML: (item) => item.icon
@@ -969,10 +1021,10 @@ const app = {
     // con CORS, o api.php?productImage= del propio servidor). Devuelve
     // { thumb: PNG 128×128 transparente, large: JPEG de hasta 640px }.
     ICON_LARGE: 640,
-    toIconImages: (src) => new Promise((resolve, reject) => {
+    toIconImages: (src, crop = null) => new Promise((resolve, reject) => {
         const isFile = src instanceof Blob;
         if (isFile && !/^image\//.test(src.type)) { reject(new Error('Elige una imagen.')); return; }
-        if (isFile && src.size > 15e6) { reject(new Error('La imagen es demasiado grande (máx. 15 MB).')); return; }
+        if (isFile && src.size > 25e6) { reject(new Error('La imagen es demasiado grande (máx. 25 MB).')); return; }
         const url = isFile ? URL.createObjectURL(src) : src;
         const img = new Image();
         if (!isFile && /^https?:/.test(url)) img.crossOrigin = 'anonymous';
@@ -980,13 +1032,16 @@ const app = {
             if (isFile) URL.revokeObjectURL(url);
             const iw = img.naturalWidth, ih = img.naturalHeight;
             try {
-                const S = app.ICON_SIZE, k = Math.min(S / iw, S / ih);
-                const w = Math.max(1, Math.round(iw * k)), h = Math.max(1, Math.round(ih * k));
+                // Miniatura: llena el cuadro. Sin recorte elegido, el cuadrado central.
+                const side = Math.min(iw, ih);
+                const r = crop || { sx: (iw - side) / 2, sy: (ih - side) / 2, sw: side, sh: side };
+                const S = app.ICON_SIZE;
                 const t = document.createElement('canvas');
                 t.width = S; t.height = S;
                 const tc = t.getContext('2d');
                 tc.imageSmoothingQuality = 'high';
-                tc.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+                tc.drawImage(img, r.sx, r.sy, r.sw, r.sh, 0, 0, S, S);
+                // Versión grande (vista previa): la imagen completa, hasta 640px.
                 const L = Math.min(1, app.ICON_LARGE / Math.max(iw, ih));
                 const l = document.createElement('canvas');
                 l.width = Math.max(1, Math.round(iw * L)); l.height = Math.max(1, Math.round(ih * L));
@@ -1005,45 +1060,172 @@ const app = {
     // Selector de imagen de un formulario (prefix: 'new' | 'edit').
     makeIconPicker: (prefix) => {
         const root = document.getElementById(`${prefix}-icon-picker`);
-        const input = root.querySelector('input[type=file]');
+        const inputs = root.querySelectorAll('input[type=file]');
         const preview = root.querySelector('.ip-preview');
         const uploadText = root.querySelector('.ip-upload-text');
+        const cropBtn = root.querySelector('.ip-crop');
         const removeBtn = root.querySelector('.ip-remove');
         const status = root.querySelector('.ip-status');
-        let value = null, busy = false, seq = 0;
+        // source: la imagen original (archivo o URL) para poder recortarla de nuevo.
+        let value = null, busy = false, seq = 0, source = null;
         const render = () => {
             preview.innerHTML = value ? `<img src="${app.iconURL(value)}" alt="">` : app.svgIcon('image');
             preview.classList.toggle('has-img', !!value);
-            uploadText.textContent = busy ? 'Subiendo…' : (value ? 'Cambiar imagen' : 'Subir imagen');
-            removeBtn.hidden = !value || busy;
+            uploadText.textContent = busy ? 'Subiendo…' : (value ? 'Cambiar' : 'Subir');
+            // Visibles pero inactivos mientras sube: ocultarlos le quitaría el foco.
+            removeBtn.hidden = !value;
+            cropBtn.hidden = !value;
+            removeBtn.setAttribute('aria-disabled', String(busy));
+            cropBtn.setAttribute('aria-disabled', String(busy));
         };
         // Sube una imagen; si mientras tanto se eligió otra o se quitó, se ignora.
-        const load = async (src, failMsg) => {
+        const load = async (src, failMsg, crop = null) => {
             const my = ++seq;
             busy = true; status.textContent = ''; render();
             try {
-                const imgs = await app.toIconImages(src);
+                const imgs = await app.toIconImages(src, crop);
                 const res = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iconUpload: imgs.thumb, iconLarge: imgs.large }) });
                 if (res.status === 401) { location.reload(); return; }
                 const json = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(json.error || failMsg);
-                if (my === seq) value = json.icon;
+                if (my === seq) { value = json.icon; source = src; }
             } catch (e) { if (my === seq) status.textContent = e.message || failMsg; }
             if (my === seq) { busy = false; render(); }
         };
-        input.addEventListener('change', () => {
+        inputs.forEach(input => input.addEventListener('change', () => {
             const file = input.files[0];
             input.value = '';
             if (file) load(file, 'No se pudo subir la imagen.');
+        }));
+        // Recortar: con la imagen original si se acaba de elegir; si no, con la
+        // versión grande guardada (o la miniatura, en imágenes antiguas).
+        cropBtn.addEventListener('click', async () => {
+            if (!value || busy) return;
+            const src = source || await app.bestImageURL(value);
+            const crop = await app.openCropper(src, cropBtn);
+            if (crop) load(src, 'No se pudo recortar la imagen.', crop);
         });
-        removeBtn.addEventListener('click', () => { seq++; busy = false; value = null; status.textContent = ''; render(); });
+        removeBtn.addEventListener('click', () => { if (busy) return; seq++; value = null; source = null; status.textContent = ''; render(); });
         render();
         return {
             get: () => value,
             busy: () => busy,
-            set: (v) => { seq++; busy = false; value = v || null; status.textContent = ''; render(); },
+            set: (v) => { seq++; busy = false; value = v || null; source = null; status.textContent = ''; render(); },
             fromURL: (url) => load(url, 'No se pudo usar la foto del producto.'),
         };
+    },
+    // URL de la versión grande de una imagen guardada, o de la miniatura si no la tiene.
+    bestImageURL: (id) => new Promise((resolve) => {
+        const large = app.iconURL(id) + '&size=l';
+        const probe = new Image();
+        probe.onload = () => resolve(large);
+        probe.onerror = () => resolve(app.iconURL(id));
+        probe.src = large;
+    }),
+
+    // --- RECORTAR IMAGEN ---
+    // Cuadro fijo; la imagen se arrastra (dedo o ratón) y se acerca con
+    // pellizco, rueda, la barra de zoom o las teclas + / −. Siempre cubre el
+    // cuadro. Devuelve el recorte en píxeles de la imagen original.
+    initCropper: () => {
+        const stage = document.getElementById('crop-stage');
+        const zoom = document.getElementById('crop-zoom');
+        const pts = new Map();
+        let pinch = null;
+        stage.addEventListener('pointerdown', (e) => {
+            stage.setPointerCapture(e.pointerId);
+            pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: app.crop.zoom }; }
+        });
+        stage.addEventListener('pointermove', (e) => {
+            const c = app.crop, p = pts.get(e.pointerId);
+            if (!c || !p) return;
+            if (pts.size === 1) { c.tx += e.clientX - p.x; c.ty += e.clientY - p.y; app.cropApply(); }
+            pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (pts.size === 2 && pinch) {
+                const [a, b] = [...pts.values()];
+                const r = stage.getBoundingClientRect();
+                app.cropZoomTo(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+            }
+        });
+        const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+        stage.addEventListener('pointerup', up);
+        stage.addEventListener('pointercancel', up);
+        stage.addEventListener('wheel', (e) => {
+            if (!app.crop) return;
+            e.preventDefault();
+            const r = stage.getBoundingClientRect();
+            app.cropZoomTo(app.crop.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX - r.left, e.clientY - r.top);
+        }, { passive: false });
+        zoom.addEventListener('input', () => app.cropZoomTo(+zoom.value));
+        stage.addEventListener('keydown', (e) => {
+            const c = app.crop;
+            if (!c) return;
+            const step = 12, moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+            if (moves[e.key]) { c.tx += moves[e.key][0]; c.ty += moves[e.key][1]; app.cropApply(); e.preventDefault(); }
+            else if (e.key === '+' || e.key === '=') { app.cropZoomTo(c.zoom * 1.1); e.preventDefault(); }
+            else if (e.key === '-') { app.cropZoomTo(c.zoom / 1.1); e.preventDefault(); }
+        });
+    },
+    openCropper: (src, opener) => new Promise((resolve) => {
+        const box = document.getElementById('cropper');
+        const img = document.getElementById('crop-img');
+        const stage = document.getElementById('crop-stage');
+        const isFile = src instanceof Blob;
+        const url = isFile ? URL.createObjectURL(src) : src;
+        img.removeAttribute('style');
+        if (!isFile && /^https?:/.test(url)) img.crossOrigin = 'anonymous'; else img.removeAttribute('crossorigin');
+        box.hidden = false;
+        app.crop = null;
+        img.onload = () => {
+            const S = stage.clientWidth, w = img.naturalWidth, h = img.naturalHeight;
+            const base = S / Math.min(w, h); // escala mínima: la imagen cubre el cuadro
+            app.crop = { resolve, url, isFile, opener, S, w, h, base, zoom: 1, tx: (S - w * base) / 2, ty: (S - h * base) / 2 };
+            img.style.width = w + 'px';
+            img.style.height = h + 'px';
+            document.getElementById('crop-zoom').value = 1;
+            app.cropApply();
+            stage.focus({ preventScroll: true });
+        };
+        img.onerror = () => { app.crop = { resolve, url, isFile, opener }; app.closeCropper(null); app.showToast('No se pudo abrir la imagen'); };
+        img.src = url;
+    }),
+    // Mantiene la imagen cubriendo el cuadro y aplica la transformación.
+    cropApply: () => {
+        const c = app.crop;
+        const sc = c.base * c.zoom;
+        c.tx = Math.min(0, Math.max(c.S - c.w * sc, c.tx));
+        c.ty = Math.min(0, Math.max(c.S - c.h * sc, c.ty));
+        document.getElementById('crop-img').style.transform = `translate(${c.tx}px, ${c.ty}px) scale(${sc})`;
+    },
+    // Zoom alrededor de un punto del cuadro (por defecto, el centro).
+    cropZoomTo: (z, cx, cy) => {
+        const c = app.crop;
+        if (!c) return;
+        z = Math.min(4, Math.max(1, z));
+        if (cx === undefined) { cx = c.S / 2; cy = c.S / 2; }
+        const old = c.base * c.zoom, next = c.base * z;
+        c.tx = cx - (cx - c.tx) * next / old;
+        c.ty = cy - (cy - c.ty) * next / old;
+        c.zoom = z;
+        document.getElementById('crop-zoom').value = z;
+        app.cropApply();
+    },
+    useCrop: () => {
+        const c = app.crop;
+        if (!c || !c.S) return;
+        const sc = c.base * c.zoom;
+        app.closeCropper({ sx: -c.tx / sc, sy: -c.ty / sc, sw: c.S / sc, sh: c.S / sc });
+    },
+    closeCropper: (result) => {
+        const c = app.crop;
+        document.getElementById('cropper').hidden = true;
+        document.getElementById('crop-img').removeAttribute('src');
+        app.crop = null;
+        if (!c) return;
+        if (c.isFile) URL.revokeObjectURL(c.url);
+        if (c.opener && document.contains(c.opener)) c.opener.focus({ preventScroll: true });
+        c.resolve(result);
     },
     pickerBusy: (picker) => {
         if (!picker.busy()) return false;
@@ -1095,6 +1277,11 @@ const app = {
         app.sheetOpener = null;
     },
     onSheetKeydown: (e) => {
+        if (!document.getElementById('cropper').hidden) {
+            if (e.key === 'Escape') { e.preventDefault(); app.closeCropper(null); }
+            else if (e.key === 'Tab') app.trapTab(document.getElementById('cropper'), e);
+            return;
+        }
         if (!document.getElementById('lightbox').hidden) {
             if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); if (e.key === 'Escape') app.closeLightbox(); }
             return;

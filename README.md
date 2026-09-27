@@ -9,6 +9,8 @@ archivo JSON plano.
 - **Lista de compra:** los artículos por comprar, agrupados por categoría.
   Tocar un artículo lo pasa al **carrito** (✓); "Finalizar compra" mueve el
   carrito al inventario. Muestra el total y el subtotal del carrito.
+- **Lista e Inventario agrupados por categoría**, cada una plegable (o todas
+  con "Contraer / Expandir todo"); el estado se recuerda en el teléfono.
 - **Inventario:** los artículos que se reponen, con su categoría y precio.
   Marca "Ya tengo" / "+ Pedir" para mover entre en casa (`stocked`) y por
   comprar (`needed`). Alta, edición y borrado. Si se mide **cuánto queda**
@@ -49,8 +51,10 @@ código de barras (p. ej. "Leche" → galón Horizon, galón Great Value). En
 ### Imágenes de los artículos
 
 Cada artículo puede tener una imagen (`[imagen] Leche` en la lista y el
-inventario); sin imagen se muestra el icono de su categoría. Tocar la imagen
-la muestra en grande (vista previa). Se sube desde
+inventario), que llena su cuadro; sin imagen se muestra el icono de su
+categoría. Tocar la imagen la muestra en grande (vista previa). En el editor:
+**cámara**, **subir** y **recortar** (arrastrar y acercar con pellizco, rueda o
+la barra de zoom; la miniatura es el recorte y la vista previa, la foto entera). Se sube desde
 *Agregar* / *Editar* (galería o cámara) o, al escanear un producto, se usa su
 foto del producto si el artículo aún no tiene imagen. El teléfono la ajusta
 a 128×128 (PNG, `data/icons/<id>.png`) y a 640 px (JPEG, `<id>-l.jpg`, para la

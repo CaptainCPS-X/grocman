@@ -186,7 +186,9 @@ if (!isAuthenticated()) {
                 <div class="icon-picker" id="new-icon-picker" role="group" aria-labelledby="new-icon-label">
                     <div class="ip-preview" aria-hidden="true"></div>
                     <div class="ip-actions">
-                        <label class="ip-upload"><input type="file" accept="image/*"><span class="ip-upload-text">Subir imagen</span></label>
+                        <label class="ip-btn ip-camera" title="Tomar foto"><input type="file" accept="image/*" capture="environment" aria-label="Tomar foto"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></label>
+                        <label class="ip-btn ip-upload" title="Subir imagen"><input type="file" accept="image/*" aria-label="Subir imagen"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg><span class="ip-upload-text">Subir</span></label>
+                        <button type="button" class="ip-btn ip-crop" title="Recortar" aria-label="Recortar imagen" hidden><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></button>
                         <button type="button" class="ip-remove" hidden>Quitar</button>
                     </div>
                     <span class="ip-status" aria-live="polite"></span>
@@ -263,7 +265,9 @@ if (!isAuthenticated()) {
                 <div class="icon-picker" id="edit-icon-picker" role="group" aria-labelledby="edit-icon-label">
                     <div class="ip-preview" aria-hidden="true"></div>
                     <div class="ip-actions">
-                        <label class="ip-upload"><input type="file" accept="image/*"><span class="ip-upload-text">Subir imagen</span></label>
+                        <label class="ip-btn ip-camera" title="Tomar foto"><input type="file" accept="image/*" capture="environment" aria-label="Tomar foto"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></label>
+                        <label class="ip-btn ip-upload" title="Subir imagen"><input type="file" accept="image/*" aria-label="Subir imagen"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg><span class="ip-upload-text">Subir</span></label>
+                        <button type="button" class="ip-btn ip-crop" title="Recortar" aria-label="Recortar imagen" hidden><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></button>
                         <button type="button" class="ip-remove" hidden>Quitar</button>
                     </div>
                     <span class="ip-status" aria-live="polite"></span>
@@ -302,6 +306,29 @@ if (!isAuthenticated()) {
         <button type="button" class="lightbox-close" aria-label="Cerrar vista previa"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         <img id="lightbox-img" alt="">
         <p id="lightbox-caption" class="lightbox-caption"></p>
+    </div>
+
+    <!-- Recortar imagen -->
+    <div id="cropper" class="cropper" role="dialog" aria-modal="true" aria-labelledby="cropper-title" hidden>
+        <div class="scanner-top">
+            <h3 id="cropper-title">Recortar imagen</h3>
+            <button type="button" class="scanner-close" aria-label="Cancelar recorte" onclick="app.closeCropper(null)"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div class="crop-area">
+            <div class="crop-stage" id="crop-stage" tabindex="0" aria-label="Imagen a recortar. Flechas para mover, más y menos para acercar.">
+                <img id="crop-img" alt="" draggable="false">
+                <div class="crop-frame" aria-hidden="true"></div>
+            </div>
+        </div>
+        <div class="crop-controls">
+            <label for="crop-zoom" class="crop-zoom-label">Zoom</label>
+            <input type="range" id="crop-zoom" min="1" max="4" step="0.01" value="1">
+        </div>
+        <p class="scanner-status">Arrastra para mover · pellizca o usa la barra para acercar</p>
+        <div class="crop-actions">
+            <button type="button" class="crop-cancel" onclick="app.closeCropper(null)">Cancelar</button>
+            <button type="button" class="crop-use" onclick="app.useCrop()">Usar recorte</button>
+        </div>
     </div>
 
     <!-- Escáner de códigos de barras -->
