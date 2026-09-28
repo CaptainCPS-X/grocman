@@ -100,7 +100,7 @@ categoría. Tocar la imagen la muestra en grande (vista previa). En el editor:
 la barra de zoom; la miniatura es el recorte y la vista previa, la foto entera). Se sube desde
 *Agregar* / *Editar* (galería o cámara) o, al escanear un producto, se usa su
 foto del producto si el artículo aún no tiene imagen. El teléfono la ajusta
-a 128×128 (PNG, `data/icons/<id>.png`) y a 640 px (JPEG, `<id>-l.jpg`, para la
+a 128×128 (PNG, `data/icons/<id>.png`) y a 1600 px (JPEG, `<id>-l.jpg`, para la
 vista previa); se sirve solo con
 sesión (`api.php?icon=<id>`). Las imágenes que ningún artículo usa se borran
 solas tras 1 h. No entran en el backup diario de `items.json`.
