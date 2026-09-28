@@ -14,6 +14,8 @@ const app = {
         flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
         barcode: '<path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+        grid: '<rect width="7" height="10" x="3" y="3" rx="1"/><rect width="7" height="10" x="14" y="3" rx="1"/><path d="M3 17h7M14 17h7M3 21h5M14 21h5"/>',
+        rows: '<rect width="5" height="7" x="3" y="3" rx="1"/><rect width="5" height="7" x="3" y="14" rx="1"/><path d="M11 5h10M11 8h6M11 16h10M11 19h6"/>',
         search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
         pencil: '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>',
         trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>'
@@ -68,6 +70,11 @@ const app = {
         basket.addEventListener('click', app.onBasketClick);
         inventory.addEventListener('click', app.onInventoryClick);
         lists.addEventListener('click', app.onListsClick);
+        // Portadas grandes de los libros: si la imagen no tiene versión grande, la miniatura.
+        lists.addEventListener('error', (e) => {
+            const img = e.target;
+            if (img.tagName === 'IMG' && img.dataset.fallback) { img.src = img.dataset.fallback; img.dataset.fallback = ''; }
+        }, true);
         document.getElementById('falta-filter').addEventListener('click', (e) => {
             const chip = e.target.closest('.chip');
             if (chip) app.setFaltaFilter(chip.dataset.filter);
@@ -423,6 +430,19 @@ const app = {
         if (l.type === 'single') return [`${pend} por comprar`, `${have} guardada${have === 1 ? '' : 's'}`];
         return [`${pend} falta${pend === 1 ? '' : 'n'}`, `${have} en casa`];
     },
+    // Vista de una colección: 'cards' (portadas) o 'list'. Se recuerda por lista.
+    LIST_VIEW_KEY: 'grocman.listView',
+    listViews: (() => { try { return JSON.parse(localStorage.getItem('grocman.listView')) || {}; } catch (e) { return {}; } })(),
+    listView: (id) => app.listViews[id] === 'list' ? 'list' : 'cards',
+    setListView: (id, v) => {
+        app.listViews[id] = v;
+        try { localStorage.setItem(app.LIST_VIEW_KEY, JSON.stringify(app.listViews)); } catch (e) { }
+        app.renderLists();
+    },
+    // Portada vertical: la imagen grande completa (la miniatura es un cuadrado recortado).
+    coverHTML: (item, cls) => item.icon
+        ? `<span class="${cls} has-img"><img src="${app.iconURL(item.icon)}&size=l" data-fallback="${app.iconURL(item.icon)}" alt="" loading="lazy" decoding="async"></span>`
+        : `<span class="${cls} no-img" style="--lc:${(app.listOf(item) || {}).color || '#f59e0b'}" aria-hidden="true">${app.catIcon('Libros')}<span class="cv-title">${app.esc(item.name)}</span></span>`,
     renderLists: () => {
         const c = document.getElementById('lists-render');
         const open = app.openListId && app.listById(app.openListId);
@@ -453,13 +473,30 @@ const app = {
             ${l.type === 'collection' ? `<button type="button" class="list-add list-search" data-action="search">${app.svgIcon('search')}Buscar libro</button>` : ''}
         </div>`;
         if (!its.length) { c.innerHTML = head + '<div class="view-empty">Esta lista está vacía.</div>'; return; }
+        const isCol = l.type === 'collection', view = isCol ? app.listView(l.id) : 'list';
+        const toggle = isCol ? `<div class="view-toggle" role="radiogroup" aria-label="Vista">
+            ${[['cards', 'grid', 'Portadas'], ['list', 'rows', 'Lista']].map(([v, ic, t]) => `<button type="button" class="vt-opt${view === v ? ' active' : ''}" role="radio" aria-checked="${view === v}" data-action="view" data-view="${v}">${app.svgIcon(ic)}<span>${t}</span></button>`).join('')}
+        </div>` : '';
+        const card = (item, labels) => {
+            const pending = item.status !== 'stocked', name = app.esc(item.name), b = item.book || {};
+            const label = pending ? labels[0] : labels[1];
+            return `<div class="book-card ${pending ? 'needed' : 'stocked'}" data-name="${name}">
+                <div class="bk-frame">
+                    <button type="button" class="bk-open" aria-label="Ver ${name}">${app.coverHTML(item, 'bk-cover')}</button>
+                    <button type="button" class="bk-toggle${pending ? '' : ' on'}" aria-label="${label}: ${name}" title="${label}">${app.svgIcon('check')}</button>
+                </div>
+                <div class="bk-title">${name}</div>
+                ${(b.authors || []).length ? `<div class="bk-author">${app.esc(b.authors.join(', '))}</div>` : ''}
+            </div>`;
+        };
         const row = (item, labels) => {
+            if (view === 'cards') return card(item, labels);
             const pending = item.status !== 'stocked', name = app.esc(item.name), b = item.book || {};
             const detail = l.type === 'collection' && (b.authors || b.year)
                 ? `<div class="inv-cat">${app.esc([(b.authors || []).join(', '), b.year].filter(Boolean).join(' · '))}</div>`
                 : (l.type === 'restock' ? app.levelBarHTML(item) : `<div class="inv-cat">${app.esc(item.category)}</div>`);
-            return `<div class="inv-item ${pending ? 'needed' : 'stocked'}" data-name="${name}">
-                ${app.rowMainHTML(item, 'inv-main', detail)}
+            return `<div class="inv-item ${pending ? 'needed' : 'stocked'}${isCol ? ' book-row' : ''}" data-name="${name}">
+                ${app.rowMainHTML(item, 'inv-main', detail, '', isCol ? app.coverHTML(item, 'item-thumb book-thumb') : null)}
                 <div class="inv-actions">
                     <button type="button" class="inv-toggle ${pending ? 'tengo' : 'pedir'}" aria-label="${pending ? labels[0] : labels[1]}: ${name}">${pending ? labels[0] : labels[1]}</button>
                     <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
@@ -467,10 +504,11 @@ const app = {
             </div>`;
         };
         const labels = l.type === 'collection' ? ['Lo tengo', 'Lo quiero'] : l.type === 'single' ? ['Ya lo tengo', '+ Pedir'] : ['Ya tengo', '+ Pedir'];
-        const section = (title, list) => list.length ? `<div class="cat-header">${title}<span class="cat-count">· ${list.length}</span></div>${list.map(i => row(i, labels)).join('')}` : '';
+        const section = (title, list) => !list.length ? '' : `<div class="cat-header">${title}<span class="cat-count">· ${list.length}</span></div>`
+            + (view === 'cards' ? `<div class="book-grid">${list.map(i => row(i, labels)).join('')}</div>` : list.map(i => row(i, labels)).join(''));
         const pend = its.filter(i => i.status !== 'stocked'), have = its.filter(i => i.status === 'stocked');
         const [t1, t2] = l.type === 'collection' ? ['Lo quiero', 'Lo tengo'] : l.type === 'single' ? ['Por comprar', 'Guardadas'] : ['Falta', 'En casa'];
-        c.innerHTML = head + section(t1, pend) + section(t2, have);
+        c.innerHTML = head + toggle + section(t1, pend) + section(t2, have);
     },
     onListsClick: (e) => {
         const card = e.target.closest('.list-card');
@@ -486,6 +524,15 @@ const app = {
             else if (a === 'menu') app.openListMenu(app.openListId);
             else if (a === 'add') app.openAddSheet(app.openListId);
             else if (a === 'search') app.openBookSearch(app.openListId);
+            else if (a === 'view') app.setListView(app.openListId, act.dataset.view);
+            return;
+        }
+        const bk = e.target.closest('.book-card');
+        if (bk) {
+            const it = app.data.items.find(i => i.name === bk.dataset.name);
+            if (!it) return;
+            if (e.target.closest('.bk-toggle')) app.setStatus(it.name, it.status === 'stocked' ? 'needed' : 'stocked');
+            else if (e.target.closest('.bk-open')) app.openLightbox(it.name);
             return;
         }
         const el = e.target.closest('.inv-item');
@@ -630,12 +677,12 @@ const app = {
     // (empieza encima de la miniatura, hasta 2 líneas) y debajo miniatura +
     // detalle (nota, productos, nivel) + precio en su propia columna, así un
     // nombre largo nunca se monta sobre el precio.
-    rowMainHTML: (item, cls, detail, badge = '') => {
+    rowMainHTML: (item, cls, detail, badge = '', thumb = null) => {
         const name = app.esc(item.name);
         const price = item.price > 0 ? `<span class="row-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
         return `<div class="row-main ${cls}" role="button" tabindex="0" aria-label="Ver ${name}">
                         <div class="row-name"><span class="row-name-text">${name}</span>${badge}</div>
-                        ${app.thumbHTML(item)}
+                        ${thumb || app.thumbHTML(item)}
                         <div class="row-detail">${detail}</div>
                         ${price}
                     </div>`;

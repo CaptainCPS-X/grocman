@@ -974,3 +974,63 @@ body {
 .sheet-full .book-search-box { flex: none; }
 .sheet-full .book-results { flex: 1; min-height: 0; max-height: none; margin-bottom: 0; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
 @media (prefers-reduced-motion: reduce) { .sheet.sheet-full { transition: none; } }
+
+/* --- Colecciones: vista Portadas / Lista --- */
+.view-toggle {
+    display: flex; gap: 4px; width: max-content; margin: 0 0 6px auto; padding: 3px;
+    border-radius: 11px; background: rgba(0, 0, 0, 0.05);
+}
+.vt-opt {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border: none; border-radius: 8px;
+    background: transparent; color: #6c757d; font: 600 13px/1 inherit; font-family: inherit; cursor: pointer;
+}
+.vt-opt .lucide { width: 16px; height: 16px; }
+.vt-opt.active { background: #fff; color: var(--primary-dark); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.vt-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* Portadas: cuadrícula de 3 (4 en pantallas anchas) */
+.book-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 12px; margin: 4px 0 14px; }
+@media (min-width: 520px) { .book-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.book-card { min-width: 0; }
+.bk-frame { position: relative; }
+.bk-open { display: block; width: 100%; padding: 0; border: none; background: none; cursor: pointer; border-radius: 8px; }
+.bk-open:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.bk-cover {
+    display: block; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 6px 16px rgba(0, 0, 0, 0.14);
+    transition: transform 0.15s ease;
+}
+.bk-open:active .bk-cover { transform: scale(0.97); }
+.bk-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.book-card.stocked .bk-cover { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.1); }
+/* Sin imagen: portada de color con el título */
+.no-img {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px; box-sizing: border-box; text-align: center; color: #fff;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--lc) 80%, #fff), var(--lc));
+}
+.no-img .lucide { width: 26px; height: 26px; opacity: 0.85; }
+.bk-cover.no-img .cv-title { font: 700 12.5px/1.25 Georgia, 'Times New Roman', serif; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; overflow-wrap: anywhere; }
+.bk-toggle {
+    position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 50%; padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.95); background: rgba(20, 24, 33, 0.45); color: rgba(255, 255, 255, 0.9);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.bk-toggle .lucide { width: 15px; height: 15px; stroke-width: 3; }
+.bk-toggle.on { background: var(--success); border-color: #fff; color: #fff; }
+.bk-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.bk-title { margin-top: 8px; font-size: 13px; font-weight: 700; line-height: 1.25; color: #212529; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.bk-author { margin-top: 2px; font-size: 11.5px; color: #868e96; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Lista: portada vertical a la izquierda del título */
+.book-row .row-main.inv-main { grid-template-columns: 46px minmax(0, 1fr) auto; grid-template-areas: "thumb name name" "thumb detail price"; row-gap: 3px; }
+.book-row .item-thumb.book-thumb { width: 46px; height: 69px; border-radius: 5px; overflow: hidden; align-self: center; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 3px 8px rgba(0, 0, 0, 0.12); }
+.book-row .item-thumb.book-thumb.has-img { border: none; }
+.book-row .item-thumb.book-thumb img { border-radius: 0; }
+.book-row .item-thumb.book-thumb::after { display: none; }
+.book-row .book-thumb.no-img { padding: 4px; gap: 0; }
+.book-row .book-thumb.no-img .lucide { width: 20px; height: 20px; }
+.book-row .book-thumb.no-img .cv-title { display: none; }
+.book-row .row-name { align-self: end; }
+.book-row .row-detail { align-self: start; }

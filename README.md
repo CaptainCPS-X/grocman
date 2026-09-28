@@ -28,7 +28,9 @@ Barra inferior: **Falta · Canasta · Inventario · Listas · Agregar**.
   - **Compra única** (`single`, p. ej. Una vez): en Falta con su etiqueta hasta
     comprarla; luego queda guardada.
   - **Colección / deseos** (`collection`, p. ej. Libros): solo en su sección,
-    "Lo quiero" / "Lo tengo". Al escanear un ISBN (978/979) se buscan título,
+    "Lo quiero" / "Lo tengo". Con dos vistas (se recuerda por lista):
+    **Portadas** (cuadrícula de portadas verticales; ✓ en la esquina marca
+    "Lo tengo") y **Lista** (filas con la portada vertical). Al escanear un ISBN (978/979) se buscan título,
     autor, año, páginas, editorial y portada en **Open Library** y va a Libros.
     Sin el libro a mano, **Buscar libro** (en Agregar al elegir una colección,
     o junto a "Agregar a …" en su detalle) busca por título y/o autor en
