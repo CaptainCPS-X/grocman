@@ -1570,7 +1570,30 @@ const app = {
         app.bookSearch = { from, q: '', page: 1, docs: [], seen: new Set(), more: false, seq: 0 };
         document.getElementById('book-search-input').value = '';
         document.getElementById('book-results').innerHTML = '<p class="bs-hint">Escribe el título o el autor (o ambos).</p>';
+        app.fitToViewport(document.getElementById('book-search-sheet'));
         app.openSheet('book-search-sheet', { focusField: true });
+    },
+    // Hoja a pantalla completa que se ajusta al área visible: con el teclado
+    // del teléfono abierto, el buscador y los resultados quedan encima de él.
+    fitToViewport: (sheet) => {
+        const vv = window.visualViewport;
+        const fit = () => {
+            if (!sheet.classList.contains('open') && app.fitSheet === sheet && sheet.dataset.fitted) { unfit(); return; }
+            sheet.style.setProperty('--vv-top', (vv ? vv.offsetTop : 0) + 'px');
+            sheet.style.setProperty('--vv-h', (vv ? vv.height : innerHeight) + 'px');
+            sheet.dataset.fitted = '1';
+        };
+        const unfit = () => {
+            if (vv) { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); }
+            window.removeEventListener('resize', fit);
+            delete sheet.dataset.fitted;
+            app.fitSheet = null;
+        };
+        if (app.fitSheet === sheet) { fit(); return; }
+        app.fitSheet = sheet;
+        fit();
+        if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); }
+        window.addEventListener('resize', fit);
     },
     closeBookSearch: () => {
         clearTimeout(app.bookSearchTimer);

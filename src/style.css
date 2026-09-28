@@ -950,3 +950,27 @@ body {
 }
 .cv-hint.gone { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .cover-viewer { animation: none; } }
+
+/* Hoja a pantalla completa (Buscar libro): anclada arriba y del alto del área
+   visible (--vv-top / --vv-h los pone app.fitToViewport; con el teclado abierto
+   se encoge para que el buscador y los resultados queden encima de él). */
+.sheet.sheet-full {
+    top: calc(var(--vv-top, 0px) + 10px + env(safe-area-inset-top, 0px)); bottom: auto;
+    height: calc(var(--vv-h, 100dvh) - 10px - env(safe-area-inset-top, 0px));
+    max-height: none; display: flex; flex-direction: column; overflow: hidden;
+    padding: 14px 16px 10px; border-radius: 20px 20px 0 0;
+    transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), top 0.15s ease, height 0.15s ease;
+}
+.sheet-full .bs-head { position: relative; flex: none; display: flex; align-items: center; justify-content: center; min-height: 40px; margin-bottom: 10px; }
+.sheet-full .bs-head .sheet-title { margin: 0; }
+.bs-close {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    width: 40px; height: 40px; border-radius: 12px; border: none; padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.05); color: #495057;
+}
+.bs-close .lucide { width: 20px; height: 20px; }
+.bs-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.sheet-full .book-search-box { flex: none; }
+.sheet-full .book-results { flex: 1; min-height: 0; max-height: none; margin-bottom: 0; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+@media (prefers-reduced-motion: reduce) { .sheet.sheet-full { transition: none; } }
