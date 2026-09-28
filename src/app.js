@@ -1513,14 +1513,42 @@ const app = {
             }
             bs.seen.add(k); b.isbns.forEach(c => isbnSeen.add(c)); fresh.push(b);
         };
-        (g.results || []).map(app.fromGoogle).forEach(add);           // Google primero
-        ((ol && ol.docs) || []).filter(d => d.title).map(app.fromOpenLibrary).forEach(add);
-        // Las que tienen portada primero (sin perder el orden de relevancia).
-        fresh.sort((a, b) => (b.thumb ? 1 : 0) - (a.thumb ? 1 : 0));
+        // Intercaladas (Google, Open Library, Google…) para que ninguna fuente tape a la otra.
+        const gs = (g.results || []).map(app.fromGoogle);
+        const os = ((ol && ol.docs) || []).filter(d => d.title).map(app.fromOpenLibrary);
+        for (let i = 0; i < Math.max(gs.length, os.length); i++) { if (gs[i]) add(gs[i]); if (os[i]) add(os[i]); }
+        app.rankBooks(q, fresh);
         bs.q = q; bs.page = page;
         bs.docs = bs.docs.concat(fresh);
         bs.more = page < 5 && (page * 10 < (g.total || 0) || page * 10 < ((ol && ol.numFound) || 0));
         app.renderBookResults();
+    },
+    // Ordena por relevancia: cuánto del texto buscado está en el título (y en el
+    // autor), título exacto, con portada, y abajo cuadernos / libros para colorear
+    // / resúmenes (salvo que se busquen). Empates: el orden intercalado original.
+    rankBooks: (q, list) => {
+        const norm = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const compact = (t) => norm(t).replace(/ /g, '');
+        const words = norm(q).split(' ').filter(w => w.length > 1);
+        const junk = /\b(coloring|colouring|journal|notebook|summary|resumen|study guide|sparknotes|cuaderno|colorear|workbook|trivia|quiz)\b/;
+        const junkOk = junk.test(norm(q));
+        const hits = (text, w) => {
+            const n = norm(text);
+            return (' ' + n + ' ').includes(' ' + w + ' ') || (w.length >= 4 && compact(text).includes(w));
+        };
+        const score = (b) => {
+            if (!words.length) return 0;
+            const inTitle = words.filter(w => hits(b.title, w)).length;
+            const inAuthor = words.filter(w => !hits(b.title, w) && hits(b.authors.join(' '), w)).length;
+            let s = 3 * inTitle / words.length + 1.5 * inAuthor / words.length;
+            const ct = compact(b.title), cq = compact(q);
+            if (ct === cq) s += 2; else if (ct.startsWith(cq) || cq.startsWith(ct)) s += 1;
+            if (b.thumb) s += 1.5;
+            if (!junkOk && junk.test(norm(b.title))) s -= 2.5;
+            return s;
+        };
+        list.forEach((b, i) => { b._s = score(b) - i * 0.01; });
+        list.sort((a, b) => b._s - a._s);
     },
     // ISBN-13 de una lista de códigos (uno de 10 dígitos se convierte).
     toISBN13: (all) => {

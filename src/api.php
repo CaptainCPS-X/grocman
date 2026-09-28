@@ -296,7 +296,35 @@ function gbooksCoverUrl() { return getenv('GROCMAN_GBOOKS_COVER_URL') ?: 'https:
 const GBOOKS_PER_PAGE = 10;
 
 // Busca libros. $q: texto libre o "isbn:<13 dígitos>". Devuelve la lista normalizada.
+// Con varias palabras (página 1) también prueba la última como autor ("maneater
+// gar" → "maneater inauthor:gar"): Google no separa palabras compuestas y así
+// aparece "Man Eater" de Gar. De esa segunda búsqueda solo se quedan los títulos
+// que coinciden con el resto del texto (sin espacios ni signos).
 function searchGoogleBooks($q, $page) {
+    $main = gbooksQuery($q, $page);
+    if (!$main['available'] || $page !== 1 || strpos($q, ':') !== false) { return $main; }
+    $words = preg_split('/\s+/u', trim($q));
+    if (count($words) < 2) { return $main; }
+    $last = array_pop($words);
+    $rest = compactText(implode(' ', $words));
+    if (strlen(compactText($last)) < 2 || strlen($rest) < 3) { return $main; }
+    $alt = gbooksQuery(implode(' ', $words) . ' inauthor:' . $last, 1);
+    $seen = array_column($main['results'], 'id');
+    $extra = array_values(array_filter($alt['results'], function ($b) use ($rest, $seen) {
+        if (in_array($b['id'], $seen, true)) { return false; }
+        $t = compactText($b['title']);
+        return $t !== '' && (strpos($t, $rest) !== false || strpos($rest, $t) !== false);
+    }));
+    $main['results'] = array_merge($extra, $main['results']);
+    return $main;
+}
+// "Man-Eater" → "maneater" (minúsculas, sin acentos, espacios ni signos).
+function compactText($t) {
+    $t = strtolower((string)$t);
+    $t = strtr($t, ['Á' => 'a', 'É' => 'e', 'Í' => 'i', 'Ó' => 'o', 'Ú' => 'u', 'Ü' => 'u', 'Ñ' => 'n', 'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n', 'à' => 'a', 'è' => 'e', 'ì' => 'i', 'ò' => 'o', 'ù' => 'u', 'ç' => 'c', 'ã' => 'a', 'õ' => 'o', 'â' => 'a', 'ê' => 'e', 'ô' => 'o']);
+    return preg_replace('/[^a-z0-9]+/', '', $t);
+}
+function gbooksQuery($q, $page) {
     $key = gbooksKey();
     if ($key === '' || !function_exists('curl_init')) { return ['available' => false, 'results' => [], 'total' => 0]; }
     $fields = 'totalItems,items(id,volumeInfo(title,subtitle,authors,publishedDate,pageCount,publisher,industryIdentifiers,imageLinks/thumbnail,description))';

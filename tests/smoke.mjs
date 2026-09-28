@@ -66,6 +66,12 @@ const upcServer = http.createServer((req, res) => {
         gbCalls.push(Object.fromEntries(url.searchParams));
         const q = url.searchParams.get('q');
         if (q === 'cuota') return json(429, { error: { code: 429 } });
+        if (q === 'maneater gar') return json(200, { totalItems: 1, items: [{ id: 'OtroLibro1', volumeInfo: { title: 'Season of the Gar', authors: ['Mark Spitzer'] } }] });
+        if (q === 'maneater inauthor:gar') return json(200, { totalItems: 3, items: [
+            { id: 'OtroLibro1', volumeInfo: { title: 'Season of the Gar', authors: ['Mark Spitzer'] } },
+            { id: 'ManEaterGar', volumeInfo: { title: 'Man-Eater', authors: ['Gar'] } },
+            { id: 'NoCoincide', volumeInfo: { title: 'Fear of the Dark', authors: ['Gar Anthony Haywood'] } },
+        ] });
         if (q === 'maneater') return json(200, { totalItems: 2, items: [
             { id: 'GbMan3at3r', volumeInfo: { title: 'Maneater', authors: ['Gar'], publishedDate: '2025-02-01', pageCount: 320, publisher: 'Indie', industryIdentifiers: [{ type: 'ISBN_10', identifier: '1234567890' }, { type: 'ISBN_13', identifier: '9781234567897' }], imageLinks: { thumbnail: 'http://books.google.com/x' }, description: '<p>Una <b>novela</b> &amp; más.</p>' } },
             { id: 'bad id!', volumeInfo: { title: 'Id inválido' } },
@@ -286,6 +292,9 @@ try {
     check('Google: se descartan ids inválidos', gb.json?.results?.length === 2 && gb.json.results[1].cover === false);
     check('Google: la clave no llega al teléfono', !JSON.stringify(gb.json).includes('clave-de-prueba'));
     check('página 2 → startIndex 10', (await request('/api.php?books=maneater&page=2')).status === 200 && gbCalls.at(-1)?.startIndex === '10');
+    const mg = await request('/api.php?books=' + encodeURIComponent('maneater gar'));
+    check('varias palabras: la última también como autor ("Man-Eater" de Gar primero)', mg.json?.results?.map(r => r.id).join(',') === 'ManEaterGar,OtroLibro1', JSON.stringify(mg.json?.results?.map(r => r.id)));
+    check('página 2 no repite la búsqueda por autor', (await request('/api.php?books=' + encodeURIComponent('maneater gar') + '&page=2')).status === 200 && gbCalls.at(-1)?.q === 'maneater gar');
     check('Google sin cuota → available:false (la app usa Open Library)', (await request('/api.php?books=cuota')).json?.available === false);
     check('búsqueda vacía → 400', (await request('/api.php?books=')).status === 400);
     const cov = await fetch(`${BASE}/api.php?bookCover=GbMan3at3r&size=l`, { headers: { Cookie: cookieHeader() } });
