@@ -37,7 +37,10 @@ Barra inferior: **Falta · Canasta · Inventario · Listas · Agregar**.
     **Google Books** (principal) y **Open Library** (secundaria), sin repetir
     y con los que tienen portada primero; al elegir uno se llenan título,
     autor, año, páginas, editorial, ISBN y portada para revisarlos antes de
-    guardar. Los que ya están aparecen marcados "Ya está en …". Al escanear
+    guardar. Los que ya están aparecen marcados "Ya está en …". Si se escribe un
+    **ISBN** (13 o 10 dígitos, con o sin guiones) se busca como ISBN; si no
+    está en ninguna base, **"Agregar con este ISBN"** abre Agregar con el
+    código ya asociado. Al escanear
     un ISBN, si Open Library no tiene portada o sinopsis, se completan con
     Google Books.
 

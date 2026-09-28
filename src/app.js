@@ -1688,10 +1688,16 @@ const app = {
         const bs = app.bookSearch, seq = ++bs.seq, box = document.getElementById('book-results');
         if (page === 1) box.innerHTML = '<p class="bs-hint">Buscando…</p>';
         else { const m = box.querySelector('.bs-more'); if (m) { m.disabled = true; m.textContent = 'Cargando…'; } }
+        // ¿Es un ISBN? (13 o 10 dígitos, con o sin guiones) → se busca como ISBN.
+        const isbn = app.queryISBN(q);
+        bs.isbn = isbn || '';
+        if (isbn === false) { box.innerHTML = '<p class="bs-hint">Ese ISBN no es válido: revisa los dígitos.</p>'; return; }
+        if (isbn) page = 1;
         const fields = 'key,title,author_name,first_publish_year,cover_i,cover_edition_key,isbn,number_of_pages_median';
-        const olP = fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&fields=${fields}&limit=10&page=${page}`)
+        const olQ = isbn ? `isbn=${isbn}` : `q=${encodeURIComponent(q)}`;
+        const olP = fetch(`https://openlibrary.org/search.json?${olQ}&fields=${fields}&limit=10&page=${page}`)
             .then(r => r.ok ? r.json() : null).catch(() => null);
-        const [g, ol] = await Promise.all([app.googleBooks(q, page), olP]);
+        const [g, ol] = await Promise.all([app.googleBooks(isbn ? 'isbn:' + isbn : q, page), olP]);
         if (seq !== bs.seq) return; // llegó una búsqueda más nueva (o se cerró)
         if (!g.available && !ol) { box.innerHTML = '<p class="bs-hint">No se pudo buscar. Revisa la conexión e intenta otra vez.</p>'; return; }
         if (page === 1) { bs.docs = []; bs.seen = new Set(); }
@@ -1714,7 +1720,7 @@ const app = {
         app.rankBooks(q, fresh);
         bs.q = q; bs.page = page;
         bs.docs = bs.docs.concat(fresh);
-        bs.more = page < 5 && (page * 10 < (g.total || 0) || page * 10 < ((ol && ol.numFound) || 0));
+        bs.more = !isbn && page < 5 && (page * 10 < (g.total || 0) || page * 10 < ((ol && ol.numFound) || 0));
         app.renderBookResults();
     },
     // Ordena por relevancia: cuánto del texto buscado está en el título (y en el
@@ -1744,6 +1750,35 @@ const app = {
         list.forEach((b, i) => { b._s = score(b) - i * 0.01; });
         list.sort((a, b) => b._s - a._s);
     },
+    // ISBN escrito en la búsqueda: su ISBN-13, false si parece un ISBN pero sus
+    // dígitos no cuadran, o null si no es un ISBN.
+    queryISBN: (q) => {
+        const c = q.replace(/[\s-]/g, '').toUpperCase();
+        if (/^97[89]\d{10}$/.test(c)) return app.gtinValid(c) ? c : false;
+        if (/^\d{9}[\dX]$/.test(c)) {
+            const sum = [...c].reduce((s, ch, i) => s + (ch === 'X' ? 10 : +ch) * (10 - i), 0);
+            return sum % 11 === 0 ? app.toISBN13([c]) : false;
+        }
+        return /^\d{10,13}$/.test(c) ? false : null;
+    },
+    // Botón "Agregar con este ISBN": Agregar con el código asociado y la lista de libros.
+    addManualISBN: (isbn) => {
+        const bs = app.bookSearch;
+        if (!isbn) return;
+        bs.seq++;
+        if (bs.from === 'add') app.openSheet('add-sheet', { focusField: false });
+        else app.openAddSheet(bs.from);
+        const list = app.listById(app.segValue('new-list'));
+        if (!list || list.type !== 'collection') {
+            const books = app.listById('books') || app.data.lists.find(l => l.type === 'collection');
+            if (books) app.setSeg('new-list', books.id);
+        }
+        app.updateListFields('new');
+        app.addBarcodes = app.addBarcodes.filter(b => !app.isISBN(b.code));
+        app.addBarcodes.push({ code: isbn, label: '' });
+        app.renderBarcodes('add');
+        app.showToast('ISBN asociado: escribe el título y el autor');
+    },
     // ISBN-13 de una lista de códigos (uno de 10 dígitos se convierte).
     toISBN13: (all) => {
         // Solo ISBN con dígito de control correcto (uno malo impediría guardar).
@@ -1764,6 +1799,18 @@ const app = {
     },
     renderBookResults: () => {
         const bs = app.bookSearch, box = document.getElementById('book-results');
+        if (!bs.docs.length && bs.isbn) {
+            // ISBN que no está en ninguna base: se agrega a mano con el código ya asociado.
+            const owner = app.data.items.find(i => (i.barcodes || []).some(b => b.code === bs.isbn));
+            box.innerHTML = owner
+                ? `<p class="bs-hint">Ese ISBN ya está en tus listas como "${app.esc(owner.name)}".</p>`
+                : `<div class="bs-manual-box">
+                    <p class="bs-hint">No encontramos el ISBN <strong>${bs.isbn}</strong> en Google Books ni en Open Library.</p>
+                    <button type="button" class="btn-primary bs-manual">${app.svgIcon('plus')}Agregar con este ISBN</button>
+                    <p class="bs-sub">Se abre Agregar con el código ya asociado: solo pon el título, el autor y la portada.</p>
+                </div>`;
+            return;
+        }
         if (!bs.docs.length) { box.innerHTML = '<p class="bs-hint">Sin resultados. Prueba con otras palabras.</p>'; return; }
         box.innerHTML = bs.docs.map((d, i) => {
             const owner = app.bookOwner(d);
@@ -1780,6 +1827,7 @@ const app = {
     onBookResultsClick: (e) => {
         const bs = app.bookSearch;
         if (e.target.closest('.bs-more')) { app.runBookSearch(bs.q, bs.page + 1); return; }
+        if (e.target.closest('.bs-manual')) { app.addManualISBN(bs.isbn); return; }
         const row = e.target.closest('.bs-row');
         if (!row) return;
         const d = bs.docs[+row.dataset.i];

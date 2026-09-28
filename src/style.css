@@ -1034,3 +1034,11 @@ body {
 .book-row .book-thumb.no-img .cv-title { display: none; }
 .book-row .row-name { align-self: end; }
 .book-row .row-detail { align-self: start; }
+
+/* Buscar libro: ISBN que no está en ninguna base */
+.bs-manual-box { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 6px 4px; }
+.bs-manual-box .bs-hint { margin: 12px 0 2px; }
+.bs-manual-box .bs-hint strong { color: #495057; letter-spacing: 0.3px; }
+.bs-manual { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.bs-manual .lucide { width: 18px; height: 18px; }
+.bs-sub { margin: 0; text-align: center; font-size: 12.5px; color: #98a2ac; }
