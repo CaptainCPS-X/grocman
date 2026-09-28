@@ -1861,9 +1861,10 @@ const app = {
     // transparente) y se suben como PNG; el artículo guarda solo el id que
     // devuelve el servidor (data/icons/, visible solo con sesión).
     ICON_SIZE: 128,
-    // v=2: las miniaturas pasaron a llenar el cuadro (recorte centrado); cambiar la
-    // versión obliga al navegador a pedirlas de nuevo pese a su caché "immutable".
-    iconURL: (id) => `api.php?icon=${encodeURIComponent(id)}&v=2`,
+    // v=3: cambiar la versión obliga al navegador a pedirlas de nuevo pese a su
+    // caché "immutable" (v2: miniaturas que llenan el cuadro; v3: portadas de
+    // libros en alta resolución, con el mismo id).
+    iconURL: (id) => `api.php?icon=${encodeURIComponent(id)}&v=3`,
 
     // Miniatura de un artículo: su imagen o, si no tiene, el icono de su categoría.
     thumbHTML: (item) => item.icon
