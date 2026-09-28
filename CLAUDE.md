@@ -46,6 +46,8 @@ BASE="sftp://$HOST/~/jezerart.com/compra"
   escáner). Orden: primero `config.php`, `session.php` y `vendor/` (los demás
   los usan), al final `app.js`.
 - **NUNCA** subir/sobrescribir `data/items.json` (datos reales) ni `auth.php`.
+- `google.php` (clave de la API de Google Books) vive solo en el servidor y
+  no se versiona: no sobrescribirlo ni borrarlo; nunca mostrar la clave.
 - La DB vive en el servidor en `data/items.json` (movida ahí desde la raíz el
   2026-07-17). `data/.htaccess` niega el acceso web directo y **debe existir**:
   tras cada despliegue comprobar que

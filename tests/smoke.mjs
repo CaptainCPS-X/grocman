@@ -4,6 +4,7 @@
 // prueba, levanta `php -S` y ejercita la API. Nunca toca src/data/items.json.
 import { spawn, execFileSync } from 'node:child_process';
 import http from 'node:http';
+import zlib from 'node:zlib';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,12 +29,27 @@ for (const f of fs.readdirSync(SRC)) {
 fs.copyFileSync(path.join(SRC, 'data', 'items.sample.json'), DATA);
 const hash = execFileSync('php', ['-r', `echo password_hash('${PASSWORD}', PASSWORD_DEFAULT);`]).toString();
 fs.writeFileSync(path.join(WEB, 'auth.php'), `<?php $stored_hash = '${hash}';`);
+const GOOGLE_PHP = path.join(WEB, 'google.php');
+fs.writeFileSync(GOOGLE_PHP, "<?php const GOOGLE_BOOKS_KEY = 'clave-de-prueba';");
 
 // --- UPCitemdb falso (la API real no se consulta en las pruebas) ---
 const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const UPC_PORT = PORT + 1000;
 const UPC = `http://127.0.0.1:${UPC_PORT}`;
 const upcCalls = {};
+const gbCalls = [];
+// PNG real de w×h (gris) para las portadas falsas.
+const pngOf = (w, h) => {
+    const chunk = (type, data) => {
+        const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+        const td = Buffer.concat([Buffer.from(type), data]);
+        const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(td));
+        return Buffer.concat([len, td, crc]);
+    };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 0;
+    const raw = Buffer.alloc((w + 1) * h, 0x80); for (let y = 0; y < h; y++) raw[y * (w + 1)] = 0;
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+};
 const upcServer = http.createServer((req, res) => {
     const url = new URL(req.url, UPC);
     const json = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
@@ -45,6 +61,24 @@ const upcServer = http.createServer((req, res) => {
         if (upc === '0078742351865') return json(429, { code: 'TOO_FAST', message: 'slow down' });
         return json(200, { code: 'OK', total: 0, items: [] });
     }
+    // Google Books falso
+    if (url.pathname === '/gbooks/volumes') {
+        gbCalls.push(Object.fromEntries(url.searchParams));
+        const q = url.searchParams.get('q');
+        if (q === 'cuota') return json(429, { error: { code: 429 } });
+        if (q === 'maneater') return json(200, { totalItems: 2, items: [
+            { id: 'GbMan3at3r', volumeInfo: { title: 'Maneater', authors: ['Gar'], publishedDate: '2025-02-01', pageCount: 320, publisher: 'Indie', industryIdentifiers: [{ type: 'ISBN_10', identifier: '1234567890' }, { type: 'ISBN_13', identifier: '9781234567897' }], imageLinks: { thumbnail: 'http://books.google.com/x' }, description: '<p>Una <b>novela</b> &amp; más.</p>' } },
+            { id: 'bad id!', volumeInfo: { title: 'Id inválido' } },
+            { id: 'SinPortada1', volumeInfo: { title: 'Sin portada', authors: ['Otro'] } },
+        ] });
+        return json(200, { totalItems: 0 });
+    }
+    if (url.pathname === '/gbooks/content') {
+        const id = url.searchParams.get('id'), zoom = url.searchParams.get('zoom');
+        if (id === 'GbMan3at3r' && zoom === '3') { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(pngOf(30, 30)); } // aviso "sin imagen"
+        if (id === 'GbMan3at3r') { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(pngOf(128, 192)); }
+        res.writeHead(404); return res.end();
+    }
     if (url.pathname === '/redir') { res.writeHead(302, { Location: `${UPC}/img.png` }); return res.end(); }
     if (url.pathname === '/img.png') { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(Buffer.from(PNG_1PX.split(',')[1], 'base64')); }
     res.writeHead(404); res.end();
@@ -52,7 +86,7 @@ const upcServer = http.createServer((req, res) => {
 
 // curl hace falta para la búsqueda de productos (en DreamHost ya viene cargado).
 const phpArgs = (port) => ['-d', 'extension=curl', '-S', `127.0.0.1:${port}`, '-t', WEB];
-const server = spawn('php', phpArgs(PORT), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '1' } });
+const server = spawn('php', phpArgs(PORT), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '1', GROCMAN_GBOOKS_URL: `${UPC}/gbooks/volumes`, GROCMAN_GBOOKS_COVER_URL: `${UPC}/gbooks/content` } });
 // Segundo servidor SIN permiso de pruebas: el proxy de fotos debe bloquear direcciones internas.
 const PORT2 = PORT + 500;
 const server2 = spawn('php', phpArgs(PORT2), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '' } });
@@ -242,6 +276,26 @@ try {
     check('UPCitemdb ocupado → 503 y NO se recuerda', (await request('/api.php?lookup=0078742351865')).status === 503 && (await request('/api.php?lookup=0078742351865')).status === 503 && upcCalls['0078742351865'] === 2);
     check('código inválido → 400', (await request('/api.php?lookup=123')).status === 400);
     check('búsqueda sin sesión → 401', (await fetch(`${BASE}/api.php?lookup=037000222057`)).status === 401);
+
+    console.log('Buscar libros (Google Books falso)');
+    const gb = await request('/api.php?books=maneater');
+    const man = gb.json?.results?.[0];
+    check('Google: disponible, con la clave del servidor', gb.json?.available === true && gbCalls.at(-1)?.key === 'clave-de-prueba' && gbCalls.at(-1)?.printType === 'books');
+    check('Google: resultado normalizado (ISBN-13, año, portada)', man?.id === 'GbMan3at3r' && man.isbn === '9781234567897' && man.year === '2025' && man.pages === 320 && man.cover === true && man.authors?.[0] === 'Gar', JSON.stringify(man));
+    check('Google: sinopsis sin HTML', man?.description === 'Una novela & más.', man?.description);
+    check('Google: se descartan ids inválidos', gb.json?.results?.length === 2 && gb.json.results[1].cover === false);
+    check('Google: la clave no llega al teléfono', !JSON.stringify(gb.json).includes('clave-de-prueba'));
+    check('página 2 → startIndex 10', (await request('/api.php?books=maneater&page=2')).status === 200 && gbCalls.at(-1)?.startIndex === '10');
+    check('Google sin cuota → available:false (la app usa Open Library)', (await request('/api.php?books=cuota')).json?.available === false);
+    check('búsqueda vacía → 400', (await request('/api.php?books=')).status === 400);
+    const cov = await fetch(`${BASE}/api.php?bookCover=GbMan3at3r&size=l`, { headers: { Cookie: cookieHeader() } });
+    check('portada grande: salta el aviso "sin imagen" y sirve la real', cov.status === 200 && /image\/png/.test(cov.headers.get('content-type') || ''));
+    check('portada: id inválido → 400, sin portada → 404', (await request('/api.php?bookCover=..%2Fx')).status === 400 && (await request('/api.php?bookCover=SinPortada1')).status === 404);
+    check('portada sin sesión → 401', (await fetch(`${BASE}/api.php?bookCover=GbMan3at3r`)).status === 401);
+    fs.renameSync(GOOGLE_PHP, GOOGLE_PHP + '.off');
+    const nokey = gbCalls.length;
+    check('sin google.php → available:false y no llama a Google', (await request('/api.php?books=maneater')).json?.available === false && gbCalls.length === nokey);
+    fs.renameSync(GOOGLE_PHP + '.off', GOOGLE_PHP);
 
     console.log('Guardados simultáneos (misma versión)');
     const base = v();

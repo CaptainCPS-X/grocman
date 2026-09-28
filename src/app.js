@@ -857,9 +857,9 @@ const app = {
         const code = codes[0];
         if (app.isISBN(code)) {
             const b = await app.lookupBook(code);
-            if (!b) return '<p class="lb-empty">Sin información de este libro en Open Library.</p>';
+            if (!b) return '<p class="lb-empty">Sin información de este libro.</p>';
             return row('Autor', (b.authors || []).join(', ')) + row('Año', b.year) + row('Páginas', b.pages) + row('Editorial', b.publisher)
-                + row('ISBN', code) + para(b.description) + tags(b.subjects) + '<p class="lb-src">Fuente: Open Library</p>';
+                + row('ISBN', code) + para(b.description) + tags(b.subjects) + `<p class="lb-src">Fuente: ${app.esc(b.source || 'Open Library')}</p>`;
         }
         const off = await app.foodDetails(code);
         if (off) {
@@ -1426,18 +1426,24 @@ const app = {
             if (b.authors && b.authors.length) document.getElementById('new-author').value = b.authors.join(', ');
             app.addBook = { year: b.year || undefined, pages: b.pages || undefined, publisher: b.publisher || undefined };
             Object.keys(app.addBook).forEach(k => app.addBook[k] === undefined && delete app.addBook[k]);
-            if (!app.iconPickers.new.get() && await app.imageExists(b.cover)) app.iconPickers.new.fromURL(b.cover);
+            if (!app.iconPickers.new.get()) {
+                if (b.cover && await app.imageExists(b.cover)) app.iconPickers.new.fromURL(b.cover);
+                else if (b.coverAlt) app.iconPickers.new.fromURL(b.coverAlt);
+            }
         } else {
             app.showToast('Libro no encontrado: escribe el título');
         }
         app.renderBarcodes('add');
     },
 
-    // --- BUSCAR UN LIBRO POR TÍTULO / AUTOR (Open Library) ---
+    // --- BUSCAR UN LIBRO POR TÍTULO / AUTOR ---
+    // Fuentes: Google Books (principal, vía el servidor, que guarda la clave) y
+    // Open Library (secundaria, directo). Se combinan sin repetir y con las que
+    // tienen portada primero. Sin Google (sin clave o sin cuota) queda Open Library.
     // from: 'add' (desde la hoja Agregar, se vuelve a ella) o el id de la lista
     // de colección donde se agregará.
     openBookSearch: (from) => {
-        app.bookSearch = { from, q: '', page: 1, docs: [], more: false, seq: 0 };
+        app.bookSearch = { from, q: '', page: 1, docs: [], seen: new Set(), more: false, seq: 0 };
         document.getElementById('book-search-input').value = '';
         document.getElementById('book-results').innerHTML = '<p class="bs-hint">Escribe el título o el autor (o ambos).</p>';
         app.openSheet('book-search-sheet', { focusField: true });
@@ -1458,43 +1464,80 @@ const app = {
         }
         app.bookSearchTimer = setTimeout(() => app.runBookSearch(q, 1), 450);
     },
+    // Google Books a través del servidor: { available, results, total }.
+    googleBooks: async (q, page = 1) => {
+        try {
+            const r = await fetch(`api.php?books=${encodeURIComponent(q)}&page=${page}`);
+            if (r.ok) return await r.json();
+        } catch (e) { }
+        return { available: false, results: [], total: 0 };
+    },
+    fromGoogle: (g) => ({
+        src: 'g', key: 'g:' + g.id, title: g.title, authors: g.authors || [], year: g.year || '',
+        pages: g.pages || null, publisher: g.publisher || '', isbns: g.isbn ? [g.isbn] : [],
+        thumb: g.cover ? `api.php?bookCover=${encodeURIComponent(g.id)}` : '',
+        large: g.cover ? `api.php?bookCover=${encodeURIComponent(g.id)}&size=l` : '',
+    }),
+    fromOpenLibrary: (d) => ({
+        src: 'ol', key: 'ol:' + d.key, title: d.title, authors: (d.author_name || []).slice(0, 3),
+        year: d.first_publish_year ? String(d.first_publish_year) : '', pages: d.number_of_pages_median || null,
+        publisher: '', isbns: d.isbn || [], editionKey: d.cover_edition_key || '',
+        thumb: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : '',
+        large: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : '',
+    }),
+    // Clave para no repetir el mismo libro (título + apellido del primer autor).
+    bookKey: (b) => {
+        const norm = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        return norm(b.title.split(/[:(]/)[0]) + '|' + norm((b.authors[0] || '').split(/\s+/).pop());
+    },
     runBookSearch: async (q, page) => {
         const bs = app.bookSearch, seq = ++bs.seq, box = document.getElementById('book-results');
         if (page === 1) box.innerHTML = '<p class="bs-hint">Buscando…</p>';
         else { const m = box.querySelector('.bs-more'); if (m) { m.disabled = true; m.textContent = 'Cargando…'; } }
         const fields = 'key,title,author_name,first_publish_year,cover_i,cover_edition_key,isbn,number_of_pages_median';
-        let j = null;
-        try {
-            const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&fields=${fields}&limit=10&page=${page}`);
-            if (r.ok) j = await r.json();
-        } catch (e) { }
+        const olP = fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&fields=${fields}&limit=10&page=${page}`)
+            .then(r => r.ok ? r.json() : null).catch(() => null);
+        const [g, ol] = await Promise.all([app.googleBooks(q, page), olP]);
         if (seq !== bs.seq) return; // llegó una búsqueda más nueva (o se cerró)
-        if (!j) { box.innerHTML = '<p class="bs-hint">No se pudo buscar. Revisa la conexión e intenta otra vez.</p>'; return; }
-        // Primero los que tienen portada; sin repetir la misma obra.
-        const prev = page === 1 ? [] : bs.docs;
-        const docs = (j.docs || []).filter(d => d.title && !prev.some(x => x.key === d.key));
-        docs.sort((a, b) => (b.cover_i ? 1 : 0) - (a.cover_i ? 1 : 0));
+        if (!g.available && !ol) { box.innerHTML = '<p class="bs-hint">No se pudo buscar. Revisa la conexión e intenta otra vez.</p>'; return; }
+        if (page === 1) { bs.docs = []; bs.seen = new Set(); }
+        const isbnSeen = new Set(bs.docs.flatMap(d => d.isbns));
+        const fresh = [];
+        const add = (b) => {
+            const k = app.bookKey(b);
+            if (bs.seen.has(k) || b.isbns.some(c => isbnSeen.has(c))) {
+                // Repetido: si el guardado no tiene portada y este sí, se queda con esta.
+                const old = fresh.find(x => app.bookKey(x) === k);
+                if (old && !old.thumb && b.thumb) fresh[fresh.indexOf(old)] = b;
+                return;
+            }
+            bs.seen.add(k); b.isbns.forEach(c => isbnSeen.add(c)); fresh.push(b);
+        };
+        (g.results || []).map(app.fromGoogle).forEach(add);           // Google primero
+        ((ol && ol.docs) || []).filter(d => d.title).map(app.fromOpenLibrary).forEach(add);
+        // Las que tienen portada primero (sin perder el orden de relevancia).
+        fresh.sort((a, b) => (b.thumb ? 1 : 0) - (a.thumb ? 1 : 0));
         bs.q = q; bs.page = page;
-        bs.docs = prev.concat(docs);
-        bs.more = page * 10 < (j.numFound || 0) && page < 5;
+        bs.docs = bs.docs.concat(fresh);
+        bs.more = page < 5 && (page * 10 < (g.total || 0) || page * 10 < ((ol && ol.numFound) || 0));
         app.renderBookResults();
     },
-    // ISBN-13 de un resultado (uno de 10 dígitos se convierte).
-    docISBN: (d) => {
-        const all = d.isbn || [];
-        const x = all.find(c => app.isISBN(c));
+    // ISBN-13 de una lista de códigos (uno de 10 dígitos se convierte).
+    toISBN13: (all) => {
+        // Solo ISBN con dígito de control correcto (uno malo impediría guardar).
+        const x = (all || []).find(c => app.isISBN(c) && app.gtinValid(c));
         if (x) return x;
-        const ten = all.find(c => /^\d{9}[\dX]$/.test(c));
+        const ten = (all || []).find(c => /^\d{9}[\dX]$/.test(c));
         if (!ten) return '';
         const b = '978' + ten.slice(0, 9);
         const sum = [...b].reduce((s, ch, i) => s + (+ch) * (i % 2 ? 3 : 1), 0);
         return b + ((10 - sum % 10) % 10);
     },
-    // ¿Ya está este libro? (el ISBN de alguna edición, o el mismo título en una colección)
-    bookOwner: (d) => {
-        const isbns = new Set(d.isbn || []);
-        const title = d.title.toLowerCase();
-        return app.data.items.find(i => (i.barcodes || []).some(b => isbns.has(b.code))
+    // ¿Ya está este libro? (algún ISBN suyo, o el mismo título en una colección)
+    bookOwner: (b) => {
+        const isbns = new Set(b.isbns);
+        const title = b.title.toLowerCase();
+        return app.data.items.find(i => (i.barcodes || []).some(c => isbns.has(c.code))
             || (i.name.toLowerCase() === title && app.isBook(i)));
     },
     renderBookResults: () => {
@@ -1502,15 +1545,15 @@ const app = {
         if (!bs.docs.length) { box.innerHTML = '<p class="bs-hint">Sin resultados. Prueba con otras palabras.</p>'; return; }
         box.innerHTML = bs.docs.map((d, i) => {
             const owner = app.bookOwner(d);
-            const cover = d.cover_i
-                ? `<img src="https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg" alt="" loading="lazy" decoding="async">`
-                : app.catIcon('Libros');
-            const meta = [(d.author_name || []).slice(0, 2).join(', '), d.first_publish_year].filter(Boolean).join(' · ');
+            const cover = d.thumb ? `<img src="${app.esc(d.thumb)}" alt="" loading="lazy" decoding="async">` : app.catIcon('Libros');
+            const meta = [d.authors.slice(0, 2).join(', '), d.year].filter(Boolean).join(' · ');
             return `<button type="button" class="bs-row${owner ? ' owned' : ''}" data-i="${i}">
                 <span class="bs-cover">${cover}</span>
                 <span class="bs-text"><strong>${app.esc(d.title)}</strong><span>${app.esc(meta)}</span>${owner ? `<em>Ya está en ${app.esc((app.listOf(owner) || {}).name || 'tus listas')}</em>` : ''}</span>
             </button>`;
         }).join('') + (bs.more ? '<button type="button" class="btn-secondary bs-more">Ver más</button>' : '');
+        // Portada que no carga → icono de libro.
+        box.querySelectorAll('.bs-cover img').forEach(img => img.addEventListener('error', () => { img.parentElement.innerHTML = app.catIcon('Libros'); }, { once: true }));
     },
     onBookResultsClick: (e) => {
         const bs = app.bookSearch;
@@ -1523,7 +1566,7 @@ const app = {
         if (d) app.pickBook(d);
     },
     // Rellena la hoja Agregar con el libro elegido (se revisa antes de guardar).
-    // ISBN, editorial y páginas salen de la edición de la portada mostrada.
+    // En Open Library, ISBN / editorial / páginas salen de la edición de la portada.
     pickBook: async (d) => {
         const bs = app.bookSearch;
         bs.seq++;
@@ -1535,31 +1578,31 @@ const app = {
             if (books) app.setSeg('new-list', books.id);
         }
         app.updateListFields('new');
-        const authors = (d.author_name || []).slice(0, 3);
         document.getElementById('new-name').value = d.title;
-        document.getElementById('new-author').value = authors.join(', ');
+        document.getElementById('new-author').value = d.authors.join(', ');
         app.iconPickers.new.set(null);
-        if (d.cover_i) app.iconPickers.new.fromURL(`https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg`);
-        const label = [d.title, authors.join(', ')].filter(Boolean).join(' · ');
-        const entry = { code: '', label, loading: true };
+        if (d.large) app.iconPickers.new.fromURL(d.large);
+        const label = [d.title, d.authors.join(', ')].filter(Boolean).join(' · ');
         app.addBarcodes = app.addBarcodes.filter(b => !app.isISBN(b.code));
-        app.addBook = { year: d.first_publish_year ? String(d.first_publish_year) : undefined, pages: d.number_of_pages_median || undefined };
+        app.addBook = { year: d.year || undefined, pages: d.pages || undefined, publisher: d.publisher || undefined };
         const pick = app.pickSeq = (app.pickSeq || 0) + 1;
-        let ed = null;
-        if (d.cover_edition_key) {
+        let isbn = app.toISBN13(d.isbns);
+        if (d.src === 'ol' && d.editionKey) {
+            const entry = { code: '', label, loading: true };
             app.addBarcodes.push(entry);
             app.renderBarcodes('add');
+            let ed = null;
             try {
-                const r = await fetch(`https://openlibrary.org/books/${encodeURIComponent(d.cover_edition_key)}.json`);
+                const r = await fetch(`https://openlibrary.org/books/${encodeURIComponent(d.editionKey)}.json`);
                 if (r.ok) ed = await r.json();
             } catch (e) { }
             if (pick !== app.pickSeq) return; // se eligió otro libro mientras tanto
             app.addBarcodes = app.addBarcodes.filter(b => b !== entry);
-        }
-        const isbn = (ed && app.docISBN({ isbn: [...(ed.isbn_13 || []), ...(ed.isbn_10 || [])] })) || app.docISBN(d);
-        if (ed) {
-            if (ed.number_of_pages) app.addBook.pages = ed.number_of_pages;
-            if ((ed.publishers || [])[0]) app.addBook.publisher = ed.publishers[0];
+            if (ed) {
+                isbn = app.toISBN13([...(ed.isbn_13 || []), ...(ed.isbn_10 || [])]) || isbn;
+                if (ed.number_of_pages) app.addBook.pages = ed.number_of_pages;
+                if ((ed.publishers || [])[0]) app.addBook.publisher = ed.publishers[0];
+            }
         }
         Object.keys(app.addBook).forEach(k => app.addBook[k] === undefined && delete app.addBook[k]);
         const owner = isbn && app.data.items.find(i => (i.barcodes || []).some(b => b.code === isbn));
@@ -1594,6 +1637,21 @@ const app = {
     // Datos de un libro en Open Library (sin clave, permite CORS).
     lookupBook: async (isbn) => {
         if (isbn in app.bookCache) return app.bookCache[isbn];
+        const ol = await app.lookupBookOL(isbn);
+        if (ol && ol.description && await app.imageExists(ol.cover)) return (app.bookCache[isbn] = ol);
+        // Falta sinopsis o portada (o no está): se completa con Google Books.
+        const g = ((await app.googleBooks('isbn:' + isbn)).results || [])[0];
+        if (!g) return (app.bookCache[isbn] = ol);
+        const gb = app.fromGoogle(g);
+        const base = ol || { title: [g.title, g.subtitle].filter(Boolean).join(': '), authors: g.authors || [], year: g.year || '', pages: g.pages, publisher: g.publisher || '', description: '', subjects: [], cover: '' };
+        return (app.bookCache[isbn] = {
+            ...base,
+            description: base.description || g.description || '',
+            coverAlt: gb.large,
+            source: ol ? (base.description ? 'Open Library' : 'Open Library · Google Books') : 'Google Books',
+        });
+    },
+    lookupBookOL: async (isbn) => {
         const get = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(r.status); return r.json(); };
         try {
             const ed = await get(`https://openlibrary.org/isbn/${isbn}.json`);
@@ -1603,7 +1661,7 @@ const app = {
             if (ed.works && ed.works[0]) { try { work = await get(`https://openlibrary.org${ed.works[0].key}.json`); } catch (e) { } }
             const desc = typeof work.description === 'string' ? work.description : (work.description || {}).value || '';
             const year = (String(ed.publish_date || '').match(/\d{4}/) || [])[0] || '';
-            return (app.bookCache[isbn] = {
+            return {
                 title: [ed.title, ed.subtitle].filter(Boolean).join(': '),
                 authors: authors.filter(Boolean), year,
                 pages: ed.number_of_pages || null,
@@ -1611,9 +1669,10 @@ const app = {
                 description: desc.replace(/\s+/g, ' ').trim().slice(0, 1200),
                 subjects: (work.subjects || []).slice(0, 6),
                 cover: `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`,
-            });
+                source: 'Open Library',
+            };
         } catch (e) {
-            return (app.bookCache[isbn] = null);
+            return null;
         }
     },
     bookCache: {},

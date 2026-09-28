@@ -31,10 +31,18 @@ Barra inferior: **Falta · Canasta · Inventario · Listas · Agregar**.
     "Lo quiero" / "Lo tengo". Al escanear un ISBN (978/979) se buscan título,
     autor, año, páginas, editorial y portada en **Open Library** y va a Libros.
     Sin el libro a mano, **Buscar libro** (en Agregar al elegir una colección,
-    o junto a "Agregar a …" en su detalle) busca por título y/o autor en Open
-    Library con la portada de cada resultado; al elegir uno se llenan título,
-    autor, año, ISBN y portada (de la edición de esa portada) para revisarlos
-    antes de guardar. Los que ya están aparecen marcados "Ya está en …".
+    o junto a "Agregar a …" en su detalle) busca por título y/o autor en
+    **Google Books** (principal) y **Open Library** (secundaria), sin repetir
+    y con los que tienen portada primero; al elegir uno se llenan título,
+    autor, año, páginas, editorial, ISBN y portada para revisarlos antes de
+    guardar. Los que ya están aparecen marcados "Ya está en …". Al escanear
+    un ISBN, si Open Library no tiene portada o sinopsis, se completan con
+    Google Books.
+
+    Google Books se consulta desde el servidor (`api.php?books=`,
+    `?bookCover=`) con la clave de `src/google.php`
+    (`<?php const GOOGLE_BOOKS_KEY = '...';`, no se versiona). Sin clave, o si
+    se acaba la cuota diaria, la app usa solo Open Library.
 
   **Hogar** es la lista base: se puede editar, pero no borrar ni cambiar de
   tipo. Borrar una lista pide escribir su nombre exacto; por defecto sus

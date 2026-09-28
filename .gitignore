@@ -13,6 +13,8 @@ src/data/login_attempts.json
 
 # Credencial: hash de la contraseña de acceso
 src/auth.php
+# Clave de la API de Google Books
+src/google.php
 
 # Credenciales de despliegue (FTP/SFTP) — nunca versionar
 deploy.local.ini

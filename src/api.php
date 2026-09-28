@@ -284,6 +284,82 @@ function serveProductImage($code) {
     fail(404, 'No se pudo obtener la foto del producto.');
 }
 
+// --- Google Books (fuente principal para buscar libros) ---
+// La clave vive solo en el servidor, en google.php (no se versiona):
+//   <?php const GOOGLE_BOOKS_KEY = '...';
+// Sin clave (o si Google falla / se acaba la cuota) se responde available:false
+// y la app usa solo Open Library.
+if (file_exists(__DIR__ . '/google.php')) { require_once __DIR__ . '/google.php'; }
+function gbooksKey() { return defined('GOOGLE_BOOKS_KEY') ? (string)GOOGLE_BOOKS_KEY : ''; }
+function gbooksApiUrl() { return getenv('GROCMAN_GBOOKS_URL') ?: 'https://www.googleapis.com/books/v1/volumes'; }
+function gbooksCoverUrl() { return getenv('GROCMAN_GBOOKS_COVER_URL') ?: 'https://books.google.com/books/content'; }
+const GBOOKS_PER_PAGE = 10;
+
+// Busca libros. $q: texto libre o "isbn:<13 dígitos>". Devuelve la lista normalizada.
+function searchGoogleBooks($q, $page) {
+    $key = gbooksKey();
+    if ($key === '' || !function_exists('curl_init')) { return ['available' => false, 'results' => [], 'total' => 0]; }
+    $fields = 'totalItems,items(id,volumeInfo(title,subtitle,authors,publishedDate,pageCount,publisher,industryIdentifiers,imageLinks/thumbnail,description))';
+    $url = gbooksApiUrl() . '?' . http_build_query([
+        'q' => $q, 'printType' => 'books', 'maxResults' => GBOOKS_PER_PAGE,
+        'startIndex' => ($page - 1) * GBOOKS_PER_PAGE, 'fields' => $fields, 'key' => $key,
+    ]);
+    $r = httpGet($url, 1000000);
+    $json = json_decode($r['body'], true);
+    if (!$r['ok'] || $r['status'] !== 200 || !is_array($json)) { return ['available' => false, 'results' => [], 'total' => 0]; }
+    $out = [];
+    foreach ((array)($json['items'] ?? []) as $it) {
+        $id = (string)($it['id'] ?? '');
+        $v = $it['volumeInfo'] ?? [];
+        $title = trim(preg_replace('/\s+/', ' ', (string)($v['title'] ?? '')));
+        if (!gbooksIdValid($id) || $title === '') { continue; }
+        $isbn13 = ''; $isbn10 = '';
+        foreach ((array)($v['industryIdentifiers'] ?? []) as $ii) {
+            if (($ii['type'] ?? '') === 'ISBN_13' && preg_match('/^97[89]\d{10}$/', (string)($ii['identifier'] ?? ''))) { $isbn13 = $ii['identifier']; }
+            if (($ii['type'] ?? '') === 'ISBN_10' && preg_match('/^\d{9}[\dX]$/', (string)($ii['identifier'] ?? ''))) { $isbn10 = $ii['identifier']; }
+        }
+        $authors = array_values(array_filter(array_map(function ($a) { return is_string($a) ? cutText(trim($a), 200) : ''; }, (array)($v['authors'] ?? []))));
+        $out[] = [
+            'id' => $id,
+            'title' => cutText($title, 240),
+            'subtitle' => cutText(trim((string)($v['subtitle'] ?? '')), 240),
+            'authors' => array_slice($authors, 0, 5),
+            'year' => (preg_match('/^\d{4}/', (string)($v['publishedDate'] ?? ''), $m) ? $m[0] : ''),
+            'pages' => (int)($v['pageCount'] ?? 0) ?: null,
+            'publisher' => cutText(trim((string)($v['publisher'] ?? '')), 200),
+            'isbn' => $isbn13 ?: $isbn10,
+            'cover' => !empty($v['imageLinks']['thumbnail']),
+            'description' => cutText(trim(preg_replace('/\s+/', ' ', strip_tags(html_entity_decode((string)($v['description'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8')))), 1200),
+        ];
+    }
+    return ['available' => true, 'results' => $out, 'total' => (int)($json['totalItems'] ?? 0)];
+}
+function gbooksIdValid($id) { return is_string($id) && preg_match('/^[A-Za-z0-9_-]{6,20}$/', $id); }
+
+// Portada de un volumen de Google Books, a través del servidor (sin CORS no se
+// podría guardar como imagen). Solo books.google.com con un id válido.
+// $size: 's' miniatura (para la lista de resultados) o 'l' la más grande posible.
+function serveGoogleCover($id, $size) {
+    if (!gbooksIdValid($id)) { fail(400, 'Id de libro inválido.'); }
+    if (!function_exists('curl_init')) { fail(503, 'No disponible.'); }
+    foreach ($size === 'l' ? [3, 2, 1] : [1] as $zoom) {
+        $url = gbooksCoverUrl() . '?' . http_build_query(['id' => $id, 'printsec' => 'frontcover', 'img' => 1, 'zoom' => $zoom]);
+        $r = httpGet($url, PRODUCT_IMAGE_MAX_BYTES);
+        $info = $r['ok'] && $r['status'] === 200 ? @getimagesizefromstring($r['body']) : false;
+        // Google devuelve un aviso "sin imagen" pequeño cuando no tiene ese tamaño.
+        if (!$info || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP, IMAGETYPE_GIF], true) || $info[0] < 40) { continue; }
+        session_write_close();
+        header('Content-Type: ' . $info['mime']);
+        header('Content-Length: ' . strlen($r['body']));
+        header('X-Content-Type-Options: nosniff');
+        header("Content-Security-Policy: default-src 'none'; sandbox");
+        header('Cache-Control: private, max-age=604800');
+        echo $r['body'];
+        exit();
+    }
+    fail(404, 'Sin portada.');
+}
+
 // Bloqueo exclusivo durante todo el ciclo leer → comprobar versión → escribir,
 // para que dos guardados simultáneos no pasen ambos la comprobación de versión.
 // Se libera solo al terminar el script.
@@ -510,6 +586,15 @@ if ($method === 'GET') {
             : ['found' => false]);
         exit();
     }
+    if (isset($_GET['books'])) {
+        $q = trim((string)$_GET['books']);
+        $page = max(1, min(10, (int)($_GET['page'] ?? 1)));
+        if ($q === '' || strlen($q) > 200) { fail(400, 'Búsqueda inválida.'); }
+        session_write_close();
+        echo json_encode(searchGoogleBooks($q, $page), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit();
+    }
+    if (isset($_GET['bookCover'])) { serveGoogleCover((string)$_GET['bookCover'], ($_GET['size'] ?? '') === 'l' ? 'l' : 's'); }
     echo json_encode(getDB());
     exit();
 }
