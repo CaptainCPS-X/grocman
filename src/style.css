@@ -757,3 +757,115 @@ body {
 .lb-src, .lb-loading, .lb-empty { margin: 10px 0 0; font-size: 12px; color: #98a2ac; }
 /* Cualquier miniatura abre la vista previa */
 .item-thumb { cursor: zoom-in; }
+
+/* ===================================================================== */
+/* --- Listas (definidas por el usuario) ---                             */
+/* ===================================================================== */
+/* Etiqueta de lista (Falta / Canasta) y pastillas del filtro con su color */
+.once-badge { color: var(--lc, #7048e8); background: color-mix(in srgb, var(--lc, #7048e8) 14%, transparent); }
+.chip.active[style*="--lc"] { background: var(--lc); }
+.filter-chips { flex-wrap: wrap; }
+
+/* Tarjetas */
+.list-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.list-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 132px;
+    padding: 14px; border-radius: 18px; cursor: pointer; text-align: left; font-family: inherit;
+    background: rgba(255, 255, 255, 0.62); border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow: 0 6px 20px rgba(31, 38, 135, 0.08);
+    transition: transform 0.12s ease, box-shadow 0.15s;
+}
+.list-card:active { transform: scale(0.98); }
+.list-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.lc-icon {
+    width: 42px; height: 42px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--lc, #3b82f6) 16%, white); color: var(--lc, #3b82f6); margin-bottom: 4px; flex-shrink: 0;
+}
+.lc-icon .lucide { width: 22px; height: 22px; }
+.lc-name { font-size: 16px; font-weight: 800; color: #212529; line-height: 1.2; overflow-wrap: anywhere; }
+.lc-type { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--lc, #868e96); }
+.lc-stats { display: flex; flex-direction: column; margin-top: auto; font-size: 12.5px; color: #6c757d; }
+.list-new { align-items: center; justify-content: center; border: 2px dashed rgba(0, 123, 255, 0.35); background: rgba(255, 255, 255, 0.35); box-shadow: none; }
+.list-new .lc-icon { background: rgba(0, 123, 255, 0.1); color: var(--primary-dark); }
+.list-new .lc-name { color: var(--primary-dark); font-size: 15px; }
+
+/* Detalle de una lista */
+.list-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.list-head .lc-icon { margin: 0; }
+.lh-back, .lh-menu {
+    width: 38px; height: 38px; flex-shrink: 0; border: none; border-radius: 11px; padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.05); color: #495057;
+}
+.lh-back .lh-chev { transform: rotate(90deg); width: 20px; height: 20px; }
+.lh-menu .lucide { width: 20px; height: 20px; }
+.lh-back:focus-visible, .lh-menu:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.lh-title { flex: 1; min-width: 0; }
+.lh-title h2 { margin: 0; font-size: 19px; font-weight: 800; color: #212529; overflow-wrap: anywhere; }
+.lh-title span { font-size: 12.5px; color: #868e96; }
+.list-add {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-bottom: 14px;
+    padding: 11px; border: 1.5px dashed rgba(0, 123, 255, 0.35); border-radius: 13px; cursor: pointer;
+    background: rgba(255, 255, 255, 0.45); color: var(--primary-dark); font-size: 14.5px; font-weight: 700; font-family: inherit;
+}
+.list-add .lucide { width: 18px; height: 18px; }
+.list-add:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Selector de lista en Agregar / Editar */
+.seg.seg-lists { flex-wrap: wrap; }
+.seg-lists .seg-opt { flex: 1 1 auto; gap: 6px; align-items: center; }
+.seg-lists .seg-opt .lucide { width: 16px; height: 16px; color: var(--lc); }
+.seg-lists .seg-opt.active { color: var(--lc); box-shadow: 0 0 0 2px var(--lc), 0 2px 8px rgba(31, 38, 135, 0.12); }
+
+/* Hoja de lista: tipo, icono y color */
+.type-opts { display: flex; flex-direction: column; gap: 8px; }
+.type-opt {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 11px 14px; text-align: left;
+    border: 1.5px solid rgba(0, 0, 0, 0.1); border-radius: 13px; background: rgba(255, 255, 255, 0.7); cursor: pointer; font-family: inherit;
+}
+.type-opt strong { font-size: 14.5px; color: #212529; }
+.type-opt span { font-size: 12.5px; color: #6c757d; }
+.type-opt.active { border-color: var(--primary); background: rgba(0, 123, 255, 0.07); }
+.type-opt:disabled { opacity: 0.45; cursor: not-allowed; }
+.type-opt:focus-visible, .icon-opt:focus-visible, .color-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.field-hint { margin: 4px 0 0; font-size: 12.5px; color: #868e96; }
+.field-hint[hidden] { display: none; }
+.icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.icon-opt {
+    aspect-ratio: 1; border: 1.5px solid rgba(0, 0, 0, 0.08); border-radius: 11px; background: rgba(255, 255, 255, 0.7);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; color: #495057; padding: 0;
+}
+.icon-opt .lucide { width: 20px; height: 20px; }
+.icon-opt.active { border-color: var(--primary); background: rgba(0, 123, 255, 0.1); color: var(--primary-dark); }
+.color-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+.color-opt { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #fff; background: var(--c); cursor: pointer; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12); padding: 0; }
+.color-opt.active { box-shadow: 0 0 0 3px var(--c); }
+
+/* Menú de una lista */
+.menu-opts { display: flex; flex-direction: column; gap: 8px; padding-bottom: 6px; }
+.menu-opt {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: none; border-radius: 13px; cursor: pointer;
+    background: rgba(0, 0, 0, 0.04); color: #212529; font-size: 15.5px; font-weight: 600; font-family: inherit; text-align: left;
+}
+.menu-opt .lucide { width: 20px; height: 20px; }
+.menu-opt.danger { color: var(--danger); background: rgba(220, 53, 69, 0.07); }
+.menu-opt[hidden] { display: none; }
+.menu-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Borrar lista */
+.danger-title { color: var(--danger); }
+.delete-warning { margin: 0; padding: 12px 14px; border-radius: 12px; background: rgba(220, 53, 69, 0.07); color: #842029; font-size: 14px; line-height: 1.4; }
+#list-delete-items[hidden] { display: none; }
+.form .radio-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; cursor: pointer;
+    background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(0, 0, 0, 0.08);
+    font-size: 14.5px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #212529;
+}
+.form .radio-row input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; -webkit-appearance: auto; appearance: auto; padding: 0; }
+.form .radio-row select { width: auto; padding: 6px 30px 6px 10px; margin-left: 4px; font-size: 14px; }
+.form .radio-row.danger { color: #842029; }
+.form label[for="list-delete-confirm"] { text-transform: none; letter-spacing: 0; font-size: 13.5px; color: #495057; font-weight: 500; }
+.btn-danger {
+    flex: 1; padding: 13px; border: none; border-radius: 13px; cursor: pointer;
+    background: var(--danger); color: #fff; font-size: 15px; font-weight: 700; font-family: inherit;
+}
+.btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }

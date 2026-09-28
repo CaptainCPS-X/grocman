@@ -6,12 +6,13 @@ archivo JSON plano.
 
 ## Secciones
 
-Barra inferior: **Falta · Canasta · Inventario · Libros · Agregar**.
+Barra inferior: **Falta · Canasta · Inventario · Listas · Agregar**.
 
 - **Falta:** lo que se acabó o falta comprar (se vigila; no todo se compra).
-  Agrupado por categoría (plegables) y con filtro **Todo / Regular / Una vez**;
-  en "Una vez" también aparecen las compras de una vez ya guardadas ("+ Pedir").
-  Cada fila tiene **"+ Canasta"** para elegir lo que se compra esta vez.
+  Agrupado por categoría (plegables) y con un filtro por lista (**Todo**, Hogar,
+  Una vez y las listas que se creen); en una lista de compra única también
+  aparecen sus artículos ya guardados ("+ Pedir"). Cada fila tiene
+  **"+ Canasta"** para elegir lo que se compra esta vez.
 - **Canasta:** solo lo elegido para esta compra, con su total. En la tienda se
   marca ✓ lo que va al carrito; **Finalizar** pasa lo marcado a "en casa" (nivel
   a 100 %) y lo no encontrado se queda en la canasta. ✕ lo devuelve a Falta.
@@ -19,13 +20,23 @@ Barra inferior: **Falta · Canasta · Inventario · Libros · Agregar**.
   "+ Pedir" mueven entre en casa y Falta. Si se mide **cuánto queda** (Editar →
   "Medir", de 10 en 10 %), se ve una barrita con borde animado; tocarla abre un
   ajuste rápido.
-- **Libros:** solo en su sección, con "Quiero comprarlo" / "Lo tengo". Al
-  escanear un ISBN (978/979) se buscan título, autor, año, páginas, editorial y
-  portada en **Open Library**.
-- **Una vez** (lista de compras que no se reponen, p. ej. un escurridor): en
-  Falta con su etiqueta y en el filtro "Una vez". Un artículo cambia de lista
-  (Regular / Una vez / Libro) desde Editar → "Lista".
+- **Listas:** tarjetas con cada lista (icono, color, tipo y resumen). Al abrir
+  una se ven sus artículos y "Agregar a …". Se pueden **crear**, **editar**
+  (nombre, tipo, icono, color) y **borrar** desde el menú ⋯ de la lista. Hay tres
+  tipos:
+  - **Se repone** (`restock`, p. ej. Hogar): Falta + Inventario, con nivel.
+  - **Compra única** (`single`, p. ej. Una vez): en Falta con su etiqueta hasta
+    comprarla; luego queda guardada.
+  - **Colección / deseos** (`collection`, p. ej. Libros): solo en su sección,
+    "Lo quiero" / "Lo tengo". Al escanear un ISBN (978/979) se buscan título,
+    autor, año, páginas, editorial y portada en **Open Library** y va a Libros.
 
+  **Hogar** es la lista base: se puede editar, pero no borrar ni cambiar de
+  tipo. Borrar una lista pide escribir su nombre exacto; por defecto sus
+  artículos se **mueven** (a Hogar u otra lista). Si se eligen borrar también,
+  se pide una confirmación más. El servidor guarda una copia
+  (`data/backups/items-antes-borrar-lista-*.json`) antes de borrar una lista.
+  Un artículo cambia de lista desde Editar → "Lista".
 Tocar la imagen de un artículo abre la **vista previa** con su información:
 libros (Open Library: autor, año, páginas, editorial, sinopsis, temas), comida
 (Open Food Facts: marca, cantidad, Nutri-Score, NOVA, nutrición por 100 g,
@@ -35,8 +46,11 @@ descripción). La información se pide al abrir la vista previa; no se guarda en
 
 Cada artículo tiene un estado: `needed` (falta; con `basket: true` si está en
 la canasta) → `in_cart` (en el carrito) → `stocked` (en casa). Listas:
-`regular` (no se guarda el campo), `once` y `books` (con `book: {authors, year,
-pages, publisher}`). Categorías en `config.php` (`CATS`); los nombres antiguos
+`list` es el id de una lista (`regular` = Hogar, no se guarda el campo); las
+listas están en `items.json` (`lists: [{id, name, type, icon, color}]`; si no
+hay, se usan `DEFAULT_LISTS` de `config.php`). Un artículo de una lista que ya
+no existe va a Hogar. Los libros llevan `book: {authors, year, pages,
+publisher}`. Categorías en `config.php` (`CATS`); los nombres antiguos
 se traducen solos (`LEGACY_CATS`).
 
 ### Productos y escáner de códigos de barras

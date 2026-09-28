@@ -1,5 +1,5 @@
 const app = {
-    data: { version: 0, items: [] },
+    data: { version: 0, items: [], lists: [] },
 
     // --- Íconos (Lucide inline) ---
     ICONS: {
@@ -7,6 +7,8 @@ const app = {
         cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
         image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
         chevron: '<path d="m6 9 6 6 6-6"/>',
+        plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+        dots: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
         collapse: '<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>',
         expand: '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
         flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
@@ -59,18 +61,18 @@ const app = {
         const shopping = document.getElementById('shopping-list-render');
         const basket = document.getElementById('basket-list-render');
         const inventory = document.getElementById('inventory-list-render');
-        const books = document.getElementById('books-list-render');
+        const lists = document.getElementById('lists-render');
         shopping.addEventListener('click', app.onShoppingClick);
         basket.addEventListener('click', app.onBasketClick);
         inventory.addEventListener('click', app.onInventoryClick);
-        books.addEventListener('click', app.onBooksClick);
+        lists.addEventListener('click', app.onListsClick);
         document.getElementById('falta-filter').addEventListener('click', (e) => {
             const chip = e.target.closest('.chip');
             if (chip) app.setFaltaFilter(chip.dataset.filter);
         });
-        app.setFaltaFilter(app.faltaFilter, false);
+        app.initListSheets();
         // Enter / Espacio en los elementos con role="button" (filas editables)
-        [shopping, basket, inventory, books].forEach(el => el.addEventListener('keydown', (e) => {
+        [shopping, basket, inventory, lists].forEach(el => el.addEventListener('keydown', (e) => {
             if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) {
                 e.preventDefault();
                 e.target.click();
@@ -79,7 +81,7 @@ const app = {
         document.addEventListener('keydown', app.onSheetKeydown);
         document.querySelector('.scanner-view').addEventListener('click', app.focusAt);
         app.iconPickers = { new: app.makeIconPicker('new'), edit: app.makeIconPicker('edit') };
-        ['shopping-list-render', 'basket-list-render', 'inventory-list-render'].forEach(id => document.getElementById(id).addEventListener('toggle', app.onGroupToggle, true));
+        ['shopping-list-render', 'basket-list-render', 'inventory-list-render', 'lists-render'].forEach(id => document.getElementById(id).addEventListener('toggle', app.onGroupToggle, true));
         app.initCropper();
         // Selectores de lista (Regular / Una vez / Libro)
         ['new', 'edit'].forEach(p => document.getElementById(`${p}-list`).addEventListener('click', (e) => {
@@ -127,17 +129,23 @@ const app = {
             const json = await res.json();
             if (!Array.isArray(json.items)) return;
             if (seq !== app.changeSeq || app.pending.length || app.flushing) return;
-            const changed = JSON.stringify(app.data.items) !== JSON.stringify(json.items);
-            app.data = { version: json.version, items: json.items };
+            const lists = Array.isArray(json.lists) ? json.lists : app.data.lists;
+            const changed = JSON.stringify([app.data.items, app.data.lists]) !== JSON.stringify([json.items, lists]);
+            app.data = { version: json.version, items: json.items, lists };
             if (changed) app.render();
         } catch (e) { console.error("Error conexión:", e); }
     },
 
-    // Aplica un cambio (función items → items) y lo guarda. Devuelve true si se guardó.
-    change: (mutate) => {
+    // Aplica un cambio a los artículos (función items → items) y lo guarda.
+    change: (mutate) => app.changeDoc(d => ({ ...d, items: mutate(d.items) })),
+    // Aplica un cambio al documento completo ({ items, lists } → { items, lists }).
+    // Devuelve true si se guardó.
+    changeDoc: (mutate) => {
         app.changeSeq++;
         app.pending.push(mutate);
-        app.data.items = mutate(app.data.items);
+        const d = mutate({ items: app.data.items, lists: app.data.lists });
+        app.data.items = d.items;
+        app.data.lists = d.lists;
         app.render();
         if (!app.flushing) app.flushing = app.flush().finally(() => { app.flushing = null; });
         return app.flushing;
@@ -152,7 +160,7 @@ const app = {
                 res = await fetch('api.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ version: app.data.version, items: app.data.items })
+                    body: JSON.stringify({ version: app.data.version, items: app.data.items, lists: app.data.lists })
                 });
                 json = await res.json().catch(() => ({}));
             } catch (e) {
@@ -161,10 +169,8 @@ const app = {
             if (res.status === 401) { location.reload(); return false; }
             if (res.status === 409 && json.latest && conflicts < 3) {
                 conflicts++;
-                app.data = {
-                    version: json.latest.version,
-                    items: app.pending.reduce((items, m) => m(items), json.latest.items)
-                };
+                const d = app.pending.reduce((doc, m) => m(doc), { items: json.latest.items, lists: json.latest.lists || app.data.lists });
+                app.data = { version: json.latest.version, items: d.items, lists: d.lists };
                 app.render();
                 continue;
             }
@@ -173,8 +179,9 @@ const app = {
             app.pending.splice(0, sent);
             // Sin más cambios pendientes: adoptar la lista tal como la guardó el servidor.
             if (!app.pending.length && Array.isArray(json.items)
-                && JSON.stringify(json.items) !== JSON.stringify(app.data.items)) {
+                && JSON.stringify([json.items, json.lists]) !== JSON.stringify([app.data.items, app.data.lists])) {
                 app.data.items = json.items;
+                if (Array.isArray(json.lists)) app.data.lists = json.lists;
                 app.render();
             }
         }
@@ -194,12 +201,25 @@ const app = {
         app.renderShopping();
         app.renderBasket();
         app.renderInventory();
-        app.renderBooks();
+        app.renderLists();
+        app.renderFaltaChips();
         app.updateTotal();
     },
 
-    isOnce: (item) => item.list === 'once',
-    isBook: (item) => item.list === 'books',
+    // --- LISTAS (las define el usuario) ---
+    // Tipos: restock (se repone: Falta + Inventario + nivel), single (compra
+    // única: Falta y luego guardada), collection (colección: lo quiero / lo tengo).
+    listById: (id) => app.data.lists.find(l => l.id === id),
+    listOf: (item) => app.listById(item.list || 'regular') || app.listById('regular') || { id: 'regular', name: 'Hogar', type: 'restock', icon: 'house', color: '#3b82f6' },
+    typeOf: (item) => app.listOf(item).type,
+    isOnce: (item) => app.typeOf(item) === 'single',
+    isBook: (item) => app.typeOf(item) === 'collection',
+    isRestock: (item) => app.typeOf(item) === 'restock',
+    // Etiqueta de la lista (en Falta y Canasta, para las que no son Hogar).
+    listBadge: (item) => {
+        const l = app.listOf(item);
+        return l.id === 'regular' ? '' : `<span class="once-badge" style="--lc:${l.color}">${app.esc(l.name)}</span>`;
+    },
     // Canasta: elegido para esta compra (por comprar con marca, o ya en el carrito).
     inBasket: (item) => item.status === 'in_cart' || (item.status === 'needed' && !!item.basket),
     // Cambiar estado manteniendo la canasta coherente (en casa ⇒ fuera de la canasta).
@@ -209,11 +229,11 @@ const app = {
         return status === 'stocked' ? app.restocked(out) : out;
     },
     // Al volver a tener el artículo en casa, su nivel vuelve a 100%.
-    restocked: (item) => (Number.isInteger(item.level) && !app.isOnce(item)) ? { ...item, level: 100 } : item,
+    restocked: (item) => (Number.isInteger(item.level) && app.isRestock(item)) ? { ...item, level: 100 } : item,
 
     // Barrita de cuánto queda (solo artículos regulares con nivel medido).
     levelBarHTML: (item) => {
-        if (app.isOnce(item) || !Number.isInteger(item.level)) return '';
+        if (!app.isRestock(item) || !Number.isInteger(item.level)) return '';
         const lv = item.level, cls = lv >= 60 ? 'ok' : lv >= 30 ? 'mid' : 'low';
         return `<button type="button" class="level-bar lv-${cls}" style="--lv:${lv}%" aria-label="Queda ${lv}% de ${app.esc(item.name)}. Ajustar">
             <span class="lv-track"><span class="lv-fill"></span></span><span class="lv-text">${lv === 0 ? 'Agotado' : lv + '%'}</span>
@@ -252,14 +272,19 @@ const app = {
     // Filtro: Todo / Regular / Una vez (con las compras de una vez ya guardadas).
     FILTER_KEY: 'grocman.faltaFilter',
     faltaFilter: (() => { try { return localStorage.getItem('grocman.faltaFilter') || 'all'; } catch (e) { return 'all'; } })(),
+    // Pastillas: Todo + cada lista que aparece en Falta (se repone / compra única).
+    renderFaltaChips: () => {
+        const el = document.getElementById('falta-filter');
+        const lists = app.data.lists.filter(l => l.type !== 'collection');
+        if (app.faltaFilter !== 'all' && !lists.some(l => l.id === app.faltaFilter)) app.faltaFilter = 'all';
+        const chip = (id, name, color) => `<button type="button" class="chip ${app.faltaFilter === id ? 'active' : ''}" role="radio" aria-checked="${app.faltaFilter === id}" data-filter="${id}"${color ? ` style="--lc:${color}"` : ''}>${app.esc(name)}</button>`;
+        const html = chip('all', 'Todo') + lists.map(l => chip(l.id, l.name, l.color)).join('');
+        if (el.innerHTML !== html) el.innerHTML = html;
+    },
     setFaltaFilter: (f, redraw = true) => {
-        app.faltaFilter = ['all', 'regular', 'once'].includes(f) ? f : 'all';
+        app.faltaFilter = (f === 'all' || app.listById(f)) ? f : 'all';
         try { localStorage.setItem(app.FILTER_KEY, app.faltaFilter); } catch (e) { }
-        document.querySelectorAll('#falta-filter .chip').forEach(c => {
-            const on = c.dataset.filter === app.faltaFilter;
-            c.classList.toggle('active', on);
-            c.setAttribute('aria-checked', String(on));
-        });
+        app.renderFaltaChips();
         if (redraw) app.renderShopping();
     },
     basketBtnHTML: (item) => {
@@ -269,13 +294,15 @@ const app = {
     renderShopping: () => {
         const container = document.getElementById('shopping-list-render');
         const f = app.faltaFilter;
-        const pending = app.data.items.filter(i => !app.isBook(i) && (i.status === 'needed' || i.status === 'in_cart')
-            && (f === 'all' || (f === 'once') === app.isOnce(i)));
-        const saved = f === 'once' ? app.data.items.filter(i => app.isOnce(i) && i.status === 'stocked').sort((a, b) => a.name.localeCompare(b.name)) : [];
+        const inFilter = (i) => f === 'all' || (i.list || 'regular') === f;
+        const pending = app.data.items.filter(i => !app.isBook(i) && (i.status === 'needed' || i.status === 'in_cart') && inFilter(i));
+        const fl = f !== 'all' ? app.listById(f) : null;
+        // Filtrando una lista de compra única: también sus artículos ya guardados.
+        const saved = fl && fl.type === 'single' ? app.data.items.filter(i => inFilter(i) && i.status === 'stocked').sort((a, b) => a.name.localeCompare(b.name)) : [];
 
         if (!pending.length && !saved.length) {
-            container.innerHTML = f === 'once'
-                ? '<div class="view-empty">Sin compras de una vez.<br><span class="view-empty-sub">Al agregar o editar un artículo, elige la lista "Una vez".</span></div>'
+            container.innerHTML = fl
+                ? `<div class="view-empty">Nada pendiente en "${app.esc(fl.name)}".</div>`
                 : '<div class="view-empty">🎉 No falta nada</div>';
             return;
         }
@@ -287,7 +314,7 @@ const app = {
                 const detail = (item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : '') + app.levelBarHTML(item);
                 return `
                 <div class="item-row ${app.inBasket(item) ? 'in-basket' : ''}" data-name="${app.esc(item.name)}">
-                    ${app.rowMainHTML(item, 'item-main', detail, app.isOnce(item) && f !== 'once' ? '<span class="once-badge">Una vez</span>' : '')}
+                    ${app.rowMainHTML(item, 'item-main', detail, f === 'all' ? app.listBadge(item) : '')}
                     ${app.basketBtnHTML(item)}
                 </div>`;
             }).join(''));
@@ -323,7 +350,7 @@ const app = {
                 const detail = item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : '';
                 return `
                 <div class="item-row ${inCart ? 'in-cart' : ''}" data-name="${name}">
-                    ${app.rowMainHTML(item, 'item-main', detail, app.isOnce(item) ? '<span class="once-badge">Una vez</span>' : '')}
+                    ${app.rowMainHTML(item, 'item-main', detail, app.listBadge(item))}
                     <div class="basket-actions">
                         <button type="button" class="check-circle ${inCart ? 'in-cart' : ''}" aria-pressed="${inCart}" aria-label="${inCart ? 'Sacar del carrito' : 'Poner en el carrito'}: ${name}">${app.svgIcon('check')}</button>
                         <button type="button" class="basket-remove" title="Sacar de la canasta" aria-label="Sacar de la canasta: ${name}">${app.svgIcon('x')}</button>
@@ -352,32 +379,98 @@ const app = {
         return out;
     })),
 
-    // --- LIBROS: solo en su sección (quiero comprarlo / lo tengo) ---
-    renderBooks: () => {
-        const container = document.getElementById('books-list-render');
-        const books = app.data.items.filter(app.isBook).sort((a, b) => a.name.localeCompare(b.name));
-        if (!books.length) {
-            container.innerHTML = '<div class="view-empty">Sin libros aún.<br><span class="view-empty-sub">Toca "Agregar" y escanea el código de barras del libro (ISBN).</span></div>';
+    // --- LISTAS: tarjetas con todas las listas y el detalle de cada una ---
+    LIST_ICONS: {
+        house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+        tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+        book: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+        gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>',
+        plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+        heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+        star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+        pill: '<path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/>',
+        shirt: '<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/>',
+        wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+        paw: '<circle cx="11" cy="4" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="20" cy="16" r="2"/><path d="M9 10a5 5 0 0 1 5 5v3.5a3.5 3.5 0 0 1-6.84 1.045Q6.52 17.48 4.46 16.84A3.5 3.5 0 0 1 5.5 10Z"/>',
+        sprout: '<path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>',
+        briefcase: '<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>',
+        gamepad: '<line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="15" x2="15.01" y1="13" y2="13"/><line x1="18" x2="18.01" y1="11" y2="11"/><rect width="20" height="12" x="2" y="6" rx="2"/>',
+        cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+        utensils: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 3 2h3Zm0 0v7"/>',
+    },
+    listIcon: (key) => `<svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${app.LIST_ICONS[key] || app.LIST_ICONS.tag}</svg>`,
+    TYPE_LABEL: { restock: 'Se repone', single: 'Compra única', collection: 'Colección' },
+    openListId: null,   // lista abierta en la pestaña Listas (null = tarjetas)
+    itemsOf: (id) => app.data.items.filter(i => (i.list || 'regular') === id),
+    // Resumen de una tarjeta, según el tipo de lista.
+    listStats: (l) => {
+        const its = app.itemsOf(l.id);
+        const pend = its.filter(i => i.status !== 'stocked').length, have = its.length - pend;
+        if (l.type === 'collection') return [`${pend} lo quiero`, `${have} lo tengo`];
+        if (l.type === 'single') return [`${pend} por comprar`, `${have} guardada${have === 1 ? '' : 's'}`];
+        return [`${pend} falta${pend === 1 ? '' : 'n'}`, `${have} en casa`];
+    },
+    renderLists: () => {
+        const c = document.getElementById('lists-render');
+        const open = app.openListId && app.listById(app.openListId);
+        if (!open) {
+            app.openListId = null;
+            c.innerHTML = `<div class="list-cards">${app.data.lists.map(l => {
+                const [a, b] = app.listStats(l);
+                return `<button type="button" class="list-card" data-list="${l.id}" style="--lc:${l.color}" aria-label="Abrir ${app.esc(l.name)}">
+                    <span class="lc-icon">${app.listIcon(l.icon)}</span>
+                    <span class="lc-name">${app.esc(l.name)}</span>
+                    <span class="lc-type">${app.TYPE_LABEL[l.type]}</span>
+                    <span class="lc-stats"><span>${a}</span><span>${b}</span></span>
+                </button>`;
+            }).join('')}
+                <button type="button" class="list-card list-new" data-action="new-list"><span class="lc-icon">${app.svgIcon('plus')}</span><span class="lc-name">Nueva lista</span></button>
+            </div>`;
             return;
         }
-        const row = (item) => {
-            const want = item.status !== 'stocked', name = app.esc(item.name), b = item.book || {};
-            const detail = `<div class="inv-cat">${app.esc([(b.authors || []).join(', '), b.year].filter(Boolean).join(' · ') || 'Libro')}</div>`;
-            return `
-            <div class="inv-item book-item ${want ? 'needed' : 'stocked'}" data-name="${name}">
+        const l = open, its = app.itemsOf(l.id).sort((a, b) => a.name.localeCompare(b.name));
+        const head = `<div class="list-head" style="--lc:${l.color}">
+            <button type="button" class="lh-back" data-action="back" aria-label="Volver a las listas">${app.svgIcon('chevron', 'lucide lh-chev')}</button>
+            <span class="lc-icon">${app.listIcon(l.icon)}</span>
+            <div class="lh-title"><h2>${app.esc(l.name)}</h2><span>${app.TYPE_LABEL[l.type]} · ${its.length} artículo${its.length === 1 ? '' : 's'}</span></div>
+            <button type="button" class="lh-menu" data-action="menu" aria-label="Opciones de la lista">${app.svgIcon('dots')}</button>
+        </div>
+        <button type="button" class="list-add" data-action="add">${app.svgIcon('plus')}Agregar a ${app.esc(l.name)}</button>`;
+        if (!its.length) { c.innerHTML = head + '<div class="view-empty">Esta lista está vacía.</div>'; return; }
+        const row = (item, labels) => {
+            const pending = item.status !== 'stocked', name = app.esc(item.name), b = item.book || {};
+            const detail = l.type === 'collection' && (b.authors || b.year)
+                ? `<div class="inv-cat">${app.esc([(b.authors || []).join(', '), b.year].filter(Boolean).join(' · '))}</div>`
+                : (l.type === 'restock' ? app.levelBarHTML(item) : `<div class="inv-cat">${app.esc(item.category)}</div>`);
+            return `<div class="inv-item ${pending ? 'needed' : 'stocked'}" data-name="${name}">
                 ${app.rowMainHTML(item, 'inv-main', detail)}
                 <div class="inv-actions">
-                    <button type="button" class="inv-toggle ${want ? 'tengo' : 'pedir'}" aria-label="${want ? 'Ya lo tengo' : 'Lo quiero'}: ${name}">${want ? 'Lo tengo' : 'Lo quiero'}</button>
+                    <button type="button" class="inv-toggle ${pending ? 'tengo' : 'pedir'}" aria-label="${pending ? labels[0] : labels[1]}: ${name}">${pending ? labels[0] : labels[1]}</button>
                     <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
                 </div>
             </div>`;
         };
-        const want = books.filter(i => i.status !== 'stocked'), have = books.filter(i => i.status === 'stocked');
-        container.innerHTML =
-            (want.length ? `<div class="cat-header">${app.catIcon('Libros')}<span>Quiero comprarlo</span><span class="cat-count">· ${want.length}</span></div>${want.map(row).join('')}` : '') +
-            (have.length ? `<div class="cat-header once-saved">${app.catIcon('Libros')}<span>Lo tengo</span><span class="cat-count">· ${have.length}</span></div>${have.map(row).join('')}` : '');
+        const labels = l.type === 'collection' ? ['Lo tengo', 'Lo quiero'] : l.type === 'single' ? ['Ya lo tengo', '+ Pedir'] : ['Ya tengo', '+ Pedir'];
+        const section = (title, list) => list.length ? `<div class="cat-header">${title}<span class="cat-count">· ${list.length}</span></div>${list.map(i => row(i, labels)).join('')}` : '';
+        const pend = its.filter(i => i.status !== 'stocked'), have = its.filter(i => i.status === 'stocked');
+        const [t1, t2] = l.type === 'collection' ? ['Lo quiero', 'Lo tengo'] : l.type === 'single' ? ['Por comprar', 'Guardadas'] : ['Falta', 'En casa'];
+        c.innerHTML = head + section(t1, pend) + section(t2, have);
     },
-    onBooksClick: (e) => {
+    onListsClick: (e) => {
+        const card = e.target.closest('.list-card');
+        if (card) {
+            if (card.dataset.action === 'new-list') app.openListSheet(null);
+            else { app.openListId = card.dataset.list; app.renderLists(); window.scrollTo(0, 0); }
+            return;
+        }
+        const act = e.target.closest('[data-action]');
+        if (act) {
+            const a = act.dataset.action;
+            if (a === 'back') { app.openListId = null; app.renderLists(); }
+            else if (a === 'menu') app.openListMenu(app.openListId);
+            else if (a === 'add') app.openAddSheet(app.openListId);
+            return;
+        }
         const el = e.target.closest('.inv-item');
         if (!el) return;
         const name = el.dataset.name, item = app.data.items.find(i => i.name === name);
@@ -385,7 +478,134 @@ const app = {
         if (e.target.closest('.inv-del')) app.deleteItem(name);
         else if (e.target.closest('.inv-toggle')) app.setStatus(name, item.status === 'stocked' ? 'needed' : 'stocked');
         else if (e.target.closest('.item-thumb')) app.openLightbox(name);
+        else if (e.target.closest('.level-bar')) app.openLevelSheet(name);
         else if (e.target.closest('.inv-main')) app.openEditSheet(name);
+    },
+
+    // --- CREAR / EDITAR / BORRAR LISTAS ---
+    initListSheets: () => {
+        const pick = (gridId, attr) => document.getElementById(gridId).addEventListener('click', (e) => {
+            const b = e.target.closest(`[data-${attr}]`);
+            if (!b || b.disabled) return;
+            app.markPick(gridId, attr, b.dataset[attr]);
+        });
+        pick('list-type', 'type'); pick('list-icon', 'icon'); pick('list-color', 'color');
+        document.querySelectorAll('#list-icon .icon-opt').forEach(b => { b.innerHTML = app.listIcon(b.dataset.icon); });
+        const confirmInput = document.getElementById('list-delete-confirm');
+        confirmInput.addEventListener('input', app.updateDeleteButton);
+        document.querySelectorAll('input[name="list-delete-mode"]').forEach(r => r.addEventListener('change', app.updateDeleteButton));
+    },
+    markPick: (gridId, attr, value) => {
+        document.querySelectorAll(`#${gridId} [data-${attr}]`).forEach(b => {
+            const on = b.dataset[attr] === value;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-checked', String(on));
+        });
+    },
+    pickValue: (gridId, attr) => document.querySelector(`#${gridId} [data-${attr}].active`)?.dataset[attr],
+    openListSheet: (id) => {
+        const l = id ? app.listById(id) : null;
+        document.getElementById('list-sheet-title').textContent = l ? 'Editar lista' : 'Nueva lista';
+        document.getElementById('list-id').value = l ? l.id : '';
+        document.getElementById('list-name').value = l ? l.name : '';
+        app.markPick('list-type', 'type', l ? l.type : 'single');
+        app.markPick('list-icon', 'icon', l ? l.icon : 'tag');
+        app.markPick('list-color', 'color', l ? l.color : '#8b5cf6');
+        const base = !!l && l.id === 'regular';
+        document.querySelectorAll('#list-type .type-opt').forEach(b => { b.disabled = base && b.dataset.type !== 'restock'; });
+        document.getElementById('list-type-hint').hidden = !base;
+        app.openSheet('list-sheet', { focusField: !l });
+    },
+    saveList: (e) => {
+        e.preventDefault();
+        const id = document.getElementById('list-id').value;
+        const name = document.getElementById('list-name').value.trim();
+        if (!name) return;
+        if (app.data.lists.some(l => l.id !== id && l.name.toLowerCase() === name.toLowerCase())) { app.showToast('Ya hay una lista con ese nombre'); return; }
+        const fields = {
+            name, type: id === 'regular' ? 'restock' : (app.pickValue('list-type', 'type') || 'single'),
+            icon: app.pickValue('list-icon', 'icon') || 'tag', color: app.pickValue('list-color', 'color') || '#64748b',
+        };
+        if (id) {
+            app.changeDoc(d => ({ ...d, lists: d.lists.map(l => l.id === id ? { ...l, ...fields } : l) }));
+            app.showToast('Lista guardada');
+        } else {
+            const newId = 'l-' + Math.random().toString(36).slice(2, 10);
+            app.openListId = newId; // antes del cambio: el redibujo ya muestra la lista nueva
+            app.changeDoc(d => d.lists.some(l => l.name.toLowerCase() === name.toLowerCase()) ? d : ({ ...d, lists: [...d.lists, { id: newId, ...fields }] }));
+            app.setTab('lists');
+            app.renderLists();
+            window.scrollTo(0, 0);
+            app.showToast('Lista creada');
+        }
+        app.closeSheets();
+    },
+    openListMenu: (id) => {
+        const l = app.listById(id);
+        if (!l) return;
+        app.menuListId = id;
+        document.getElementById('list-menu-title').textContent = l.name;
+        document.getElementById('list-menu-delete').hidden = id === 'regular';
+        document.getElementById('list-menu-note').hidden = id !== 'regular';
+        app.openSheet('list-menu-sheet', { focusField: false });
+    },
+    // Borrar: explica qué pasará, por defecto mueve los artículos a otra lista
+    // y exige escribir el nombre de la lista.
+    openDeleteList: (id) => {
+        const l = app.listById(id);
+        if (!l || id === 'regular') return;
+        const n = app.itemsOf(id).length;
+        app.deleteListId = id;
+        document.getElementById('list-delete-title').textContent = `Borrar "${l.name}"`;
+        document.getElementById('list-delete-summary').innerHTML = n
+            ? `Esta lista tiene <strong>${n} artículo${n === 1 ? '' : 's'}</strong>. La lista se borra; elige qué hacer con ellos.`
+            : 'Esta lista está vacía. Solo se borrará la lista.';
+        document.getElementById('list-delete-items').hidden = !n;
+        document.getElementById('list-delete-count').textContent = `${n} artículo${n === 1 ? '' : 's'}`;
+        document.getElementById('list-delete-target').innerHTML = app.data.lists.filter(x => x.id !== id)
+            .map(x => `<option value="${x.id}" ${x.id === 'regular' ? 'selected' : ''}>${app.esc(x.name)}</option>`).join('');
+        document.querySelector('input[name="list-delete-mode"][value="move"]').checked = true;
+        document.getElementById('list-delete-name').textContent = l.name;
+        document.getElementById('list-delete-confirm').value = '';
+        app.updateDeleteButton();
+        app.openSheet('list-delete-sheet', { focusField: false });
+    },
+    updateDeleteButton: () => {
+        const l = app.listById(app.deleteListId);
+        const typed = document.getElementById('list-delete-confirm').value.trim();
+        const del = document.querySelector('input[name="list-delete-mode"]:checked').value === 'delete';
+        const n = l ? app.itemsOf(l.id).length : 0;
+        const btn = document.getElementById('list-delete-btn');
+        btn.disabled = !l || typed !== l.name;
+        btn.textContent = del && n ? `Borrar lista y ${n} artículo${n === 1 ? '' : 's'}` : 'Borrar lista';
+    },
+    // Pasar un artículo a otra lista respetando el tipo de destino.
+    moveToList: (item, target) => {
+        const t = app.listById(target), out = { ...item };
+        if (target === 'regular') delete out.list; else out.list = target;
+        if (!t || t.type !== 'restock') delete out.level;
+        if (t && t.type === 'collection') { delete out.basket; if (out.status === 'in_cart') out.status = 'needed'; }
+        if (target === 'books') out.category = 'Libros'; else if (out.category === 'Libros') out.category = 'Otros';
+        return out;
+    },
+    confirmDeleteList: async (e) => {
+        e.preventDefault();
+        const l = app.listById(app.deleteListId);
+        if (!l || l.id === 'regular' || document.getElementById('list-delete-confirm').value.trim() !== l.name) return;
+        const del = document.querySelector('input[name="list-delete-mode"]:checked').value === 'delete';
+        const target = document.getElementById('list-delete-target').value || 'regular';
+        const n = app.itemsOf(l.id).length;
+        // Última confirmación si también se borran artículos.
+        if (del && n && !confirm(`Se borrarán la lista "${l.name}" y sus ${n} artículo${n === 1 ? '' : 's'}. Esto no se puede deshacer desde la app. ¿Continuar?`)) return;
+        const id = l.id;
+        app.closeSheets();
+        app.openListId = null;
+        const ok = await app.changeDoc(d => ({
+            lists: d.lists.filter(x => x.id !== id),
+            items: del ? d.items.filter(i => (i.list || 'regular') !== id)
+                : d.items.map(i => (i.list || 'regular') === id ? app.moveToList(i, target) : i),
+        }));
+        if (ok) app.showToast(del ? `Lista "${l.name}" borrada` : `Lista borrada; artículos movidos a ${app.listById(target)?.name || 'Hogar'}`);
     },
 
     // --- FILAS Y CATEGORÍAS (compartido por Lista, Inventario y Una vez) ---
@@ -480,7 +700,7 @@ const app = {
     // --- INVENTARIO ---
     renderInventory: () => {
         const container = document.getElementById('inventory-list-render');
-        const regular = app.data.items.filter(i => !app.isOnce(i) && !app.isBook(i));
+        const regular = app.data.items.filter(app.isRestock);
         if (regular.length === 0) {
             container.innerHTML = '<div class="view-empty">Sin artículos aún</div>';
             return;
@@ -536,21 +756,26 @@ const app = {
         });
     },
     segValue: (id) => document.querySelector(`#${id} .seg-opt.active`)?.dataset.list || 'regular',
+    renderListPicker: (p, selected) => {
+        const el = document.getElementById(`${p}-list`);
+        el.innerHTML = app.data.lists.map(l => `<button type="button" class="seg-opt" role="radio" data-list="${l.id}" style="--lc:${l.color}">${app.listIcon(l.icon)}${app.esc(l.name)}</button>`).join('');
+        app.setSeg(`${p}-list`, app.listById(selected) ? selected : 'regular');
+    },
 
     // --- NIVEL (cuánto queda en casa) ---
     // En Editar: interruptor "Medir" + slider; no aplica a compras de una vez.
     // Campos según la lista: los libros no tienen categoría ni nivel (sí autor);
     // "Una vez" no tiene nivel.
     updateListFields: (p) => {
-        const list = app.segValue(`${p}-list`);
+        const list = app.segValue(`${p}-list`), type = (app.listById(list) || {}).type;
         document.getElementById(`${p}-cat-field`).hidden = list === 'books';
-        document.getElementById(`${p}-author-field`).hidden = list !== 'books';
+        document.getElementById(`${p}-author-field`).hidden = type !== 'collection';
         if (p === 'edit') app.updateLevelField();
     },
     updateLevelField: () => {
-        const list = app.segValue('edit-list');
+        const type = (app.listById(app.segValue('edit-list')) || {}).type;
         const on = document.getElementById('edit-level-on').checked;
-        document.getElementById('edit-level-field').hidden = list !== 'regular';
+        document.getElementById('edit-level-field').hidden = type !== 'restock';
         document.getElementById('edit-level-control').hidden = !on;
     },
     showLevel: (lv) => {
@@ -707,10 +932,10 @@ const app = {
             price: parseFloat(document.getElementById('new-price').value) || 0,
             status: 'needed'
         };
-        const list = app.segValue('new-list');
+        const list = app.segValue('new-list'), ltype = (app.listById(list) || {}).type;
         if (list !== 'regular') newItem.list = list;
-        if (list === 'books') {
-            newItem.category = 'Libros';
+        if (list === 'books') newItem.category = 'Libros';
+        if (ltype === 'collection') {
             const authors = document.getElementById('new-author').value.split(',').map(a => a.trim()).filter(Boolean);
             const book = { ...(app.addBook || {}) };
             if (authors.length) book.authors = authors; else delete book.authors;
@@ -730,7 +955,8 @@ const app = {
         app.closeSheets();
         app.addBook = null;
         document.getElementById('new-author').value = '';
-        app.showToast(newItem.list === 'books' ? 'Libro agregado' : newItem.list === 'once' ? 'Agregado (una vez)' : 'Agregado a Falta');
+        const dest = app.listById(list) || { name: 'Hogar', type: 'restock' };
+        app.showToast(dest.type === 'collection' ? `Agregado a ${dest.name}` : `Agregado a Falta (${dest.name})`);
     },
 
     deleteItem: (name) => {
@@ -750,7 +976,7 @@ const app = {
         app.editBarcodes = (item.barcodes || []).map(b => ({ ...b }));
         app.renderBarcodes('edit');
         app.iconPickers.edit.set(item.icon);
-        app.setSeg('edit-list', item.list || 'regular');
+        app.renderListPicker('edit', item.list || 'regular');
         document.getElementById('edit-author').value = ((item.book || {}).authors || []).join(', ');
         app.updateListFields('edit');
         const measured = Number.isInteger(item.level);
@@ -783,24 +1009,19 @@ const app = {
         };
         const codes = new Set(fields.barcodes.map(b => b.code));
         const icon = app.iconPickers.edit.get();
-        const list = app.segValue('edit-list');
-        const level = list === 'regular' && document.getElementById('edit-level-on').checked ? +document.getElementById('edit-level').value : null;
+        const list = app.segValue('edit-list'), ltype = (app.listById(list) || {}).type;
+        const level = ltype === 'restock' && document.getElementById('edit-level-on').checked ? +document.getElementById('edit-level').value : null;
         const authors = document.getElementById('edit-author').value.split(',').map(a => a.trim()).filter(Boolean);
         const edited = (item) => {
-            const out = { ...item, ...fields };
+            const out = app.moveToList({ ...item, ...fields }, list);
             if (icon) out.icon = icon; else delete out.icon;
-            if (list !== 'regular') out.list = list; else delete out.list;
             if (level !== null) out.level = level; else delete out.level;
-            if (list === 'books') {
-                out.category = 'Libros';
-                delete out.basket;
-                if (out.status === 'in_cart') out.status = 'needed';
+            if (ltype === 'collection') {
                 const book = { ...(item.book || {}) };
                 if (authors.length) book.authors = authors; else delete book.authors;
                 if (Object.keys(book).length) out.book = book; else delete out.book;
             } else {
                 delete out.book;
-                if (out.category === 'Libros') out.category = 'Otros';
             }
             return out;
         };
@@ -1176,7 +1397,8 @@ const app = {
         const entry = { code: isbn, label: '', loading: true };
         app.addBarcodes.push(entry);
         app.renderBarcodes('add');
-        app.setSeg('new-list', 'books');
+        const booksList = app.listById('books') || app.data.lists.find(l => l.type === 'collection');
+        if (booksList) app.setSeg('new-list', booksList.id);
         app.updateListFields('new');
         const b = await app.lookupBook(isbn);
         entry.loading = false;
@@ -1513,7 +1735,10 @@ const app = {
     // que no aparezca el teclado; con teclado físico se sigue navegando con Tab).
     openSheet: (id, { focusField = true } = {}) => {
         const sheet = document.getElementById(id);
-        app.sheetOpener = document.activeElement;
+        // Abrir una hoja desde otra (p. ej. "Editar lista" desde su menú) cierra la anterior.
+        const prev = document.querySelector('.sheet.open');
+        if (prev && prev !== sheet) prev.classList.remove('open');
+        else app.sheetOpener = document.activeElement;
         document.getElementById('sheet-backdrop').classList.add('open');
         sheet.classList.add('open');
         // Enfocar al terminar de subir la hoja; se cancela si antes se cierra o se
@@ -1525,9 +1750,14 @@ const app = {
             (f || sheet).focus({ preventScroll: true });
         }, 320);
     },
-    openAddSheet: () => {
+    // listId: lista preseleccionada (desde el detalle de una lista o el filtro de Falta).
+    openAddSheet: (listId) => {
         app.iconPickers.new.set(null);
-        app.setSeg('new-list', app.currentTab === 'books' ? 'books' : (app.currentTab === 'shopping' && app.faltaFilter === 'once') ? 'once' : 'regular');
+        const pre = typeof listId === 'string' ? listId
+            : app.currentTab === 'lists' && app.openListId ? app.openListId
+            : app.currentTab === 'shopping' && app.faltaFilter !== 'all' ? app.faltaFilter : 'regular';
+        app.renderListPicker('new', pre);
+        document.getElementById('new-cat').value = 'Otros'; // la elige el usuario (el escaneo la propone)
         app.addBook = null;
         document.getElementById('new-author').value = '';
         app.updateListFields('new');
@@ -1582,7 +1812,7 @@ const app = {
         app.currentTab = tabName;
         document.querySelectorAll('.bn-item[data-view]').forEach(b =>
             b.classList.toggle('active', b.dataset.view === tabName));
-        ['shopping', 'basket', 'inventory', 'books'].forEach(v =>
+        ['shopping', 'basket', 'inventory', 'lists'].forEach(v =>
             document.getElementById(`view-${v}`).classList.toggle('hidden', tabName !== v));
         app.updateTotal();
     },

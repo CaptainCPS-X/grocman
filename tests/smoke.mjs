@@ -195,11 +195,34 @@ try {
     const bs = readData().items.map(i => [i.name, i.status, !!i.basket]);
     check('canasta solo en "por comprar"; en casa o en el carrito no guarda la marca', JSON.stringify(bs) === '[["X","needed",true],["Y","stocked",false],["Z","in_cart",false]]', JSON.stringify(bs));
 
+    console.log('Listas definidas por el usuario');
+    const baseLists = (await request('/api.php')).json?.lists || [];
+    check('listas iniciales: Hogar, Una vez, Libros', baseLists.map(l => l.id).join() === 'regular,once,books' && baseLists[0].name === 'Hogar' && baseLists[0].type === 'restock', JSON.stringify(baseLists));
+    const gifts = { id: 'l-regalos', name: 'Regalos', type: 'collection', icon: 'gift', color: '#EC4899' };
+    const lr = await post({ version: v(), lists: [...baseLists, gifts], items: [item({ name: 'Bufanda', list: 'l-regalos', status: 'in_cart', basket: true, level: 30 }), item({ name: 'Perdido', list: 'l-no-existe' })] });
+    const d1 = readData();
+    check('crear lista → se guarda (color normalizado)', lr.status === 200 && d1.lists.some(l => l.id === 'l-regalos' && l.color === '#ec4899'), lr.text);
+    const buf = d1.items.find(i => i.name === 'Bufanda');
+    check('colección: sin canasta, sin carrito, sin nivel', buf.list === 'l-regalos' && buf.status === 'needed' && !('basket' in buf) && !('level' in buf), JSON.stringify(buf));
+    check('artículo con lista inexistente → Hogar', !('list' in d1.items.find(i => i.name === 'Perdido')));
+    check('sin la lista Hogar → 400', (await post({ version: v(), lists: [gifts], items: [] })).status === 400);
+    check('tipo de lista desconocido → 400', (await post({ version: v(), lists: [...baseLists, { ...gifts, type: 'rara' }], items: [] })).status === 400);
+    check('nombre de lista repetido → 400', (await post({ version: v(), lists: [...baseLists, { ...gifts, name: 'hogar' }], items: [] })).status === 400);
+    await post({ version: v(), lists: d1.lists.map(l => l.id === 'regular' ? { ...l, type: 'single', name: 'Casa' } : l), items: d1.items });
+    const hogar = readData().lists.find(l => l.id === 'regular');
+    check('Hogar se puede renombrar pero siempre es "se repone"', hogar.name === 'Casa' && hogar.type === 'restock');
+    const bkBefore = fs.readdirSync(path.join(DATA_DIR, 'backups')).filter(f => f.includes('antes-borrar-lista')).length;
+    await post({ version: v(), lists: readData().lists.filter(l => l.id !== 'l-regalos'), items: readData().items.map(i => ({ ...i, list: undefined })) });
+    check('borrar una lista → backup automático antes', fs.readdirSync(path.join(DATA_DIR, 'backups')).filter(f => f.includes('antes-borrar-lista')).length === bkBefore + 1 && !readData().lists.some(l => l.id === 'l-regalos'));
+    const noLists = await post({ version: v(), items: readData().items });
+    check('guardar sin enviar listas las conserva', noLists.status === 200 && readData().lists.length === 3);
+
     console.log('Listas y nivel');
     const r1 = await post({ version: v(), items: [item({ name: 'Escurridor', list: 'once' }), item({ name: 'Azúcar', level: 40 }), item({ name: 'Sal', list: 'regular' })] });
     const saved2 = readData().items;
     check('lista "once" y nivel se guardan; "regular" no guarda el campo', r1.status === 200 && saved2[0].list === 'once' && saved2[1].level === 40 && !('list' in saved2[2]) && !('level' in saved2[2]), JSON.stringify(saved2));
-    check('lista inválida → 400', (await post({ version: v(), items: [item({ list: 'otra' })] })).status === 400);
+    await post({ version: v(), items: [item({ list: 'otra' })] });
+    check('lista desconocida → el artículo va a Hogar (no se pierde)', !('list' in readData().items[0]));
     check('nivel que no es múltiplo de 10 → 400', (await post({ version: v(), items: [item({ level: 45 })] })).status === 400);
     check('nivel fuera de 0–100 → 400', (await post({ version: v(), items: [item({ level: 110 })] })).status === 400);
 

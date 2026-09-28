@@ -124,11 +124,7 @@ if (!isAuthenticated()) {
 
         <!-- Falta: lo que se acabó o falta comprar (se vigila; no todo se compra) -->
         <div id="view-shopping" class="view">
-            <div class="filter-chips" id="falta-filter" role="radiogroup" aria-label="Mostrar">
-                <button type="button" class="chip" role="radio" data-filter="all">Todo</button>
-                <button type="button" class="chip" role="radio" data-filter="regular">Regular</button>
-                <button type="button" class="chip" role="radio" data-filter="once">Una vez</button>
-            </div>
+            <div class="filter-chips" id="falta-filter" role="radiogroup" aria-label="Mostrar"></div>
             <div id="shopping-list-render"></div>
         </div>
 
@@ -141,8 +137,9 @@ if (!isAuthenticated()) {
             <div id="inventory-list-render"></div>
         </div>
 
-        <div id="view-books" class="view hidden">
-            <div id="books-list-render"></div>
+        <!-- Listas: tarjetas de cada lista y su detalle -->
+        <div id="view-lists" class="view hidden">
+            <div id="lists-render"></div>
         </div>
     </div>
 
@@ -173,9 +170,9 @@ if (!isAuthenticated()) {
             <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
             <span class="bn-label">Inventario</span>
         </button>
-        <button class="bn-item" data-view="books" onclick="app.setTab('books')">
-            <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
-            <span class="bn-label">Libros</span>
+        <button class="bn-item" data-view="lists" onclick="app.setTab('lists')">
+            <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+            <span class="bn-label">Listas</span>
         </button>
         <button class="bn-item" onclick="app.openAddSheet()">
             <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
@@ -223,11 +220,7 @@ if (!isAuthenticated()) {
             </div>
             <div class="field">
                 <span class="field-label" id="new-list-label">Lista</span>
-                <div class="seg" id="new-list" role="radiogroup" aria-labelledby="new-list-label">
-                    <button type="button" class="seg-opt" role="radio" data-list="regular">Regular <span class="seg-sub">se repone</span></button>
-                    <button type="button" class="seg-opt" role="radio" data-list="once">Una vez</button>
-                    <button type="button" class="seg-opt" role="radio" data-list="books">Libro</button>
-                </div>
+                <div class="seg seg-lists" id="new-list" role="radiogroup" aria-labelledby="new-list-label"></div>
             </div>
             <div class="field">
                 <label for="new-price">Precio <span class="opt">(opcional)</span></label>
@@ -261,11 +254,7 @@ if (!isAuthenticated()) {
             </div>
             <div class="field">
                 <span class="field-label" id="edit-list-label">Lista</span>
-                <div class="seg" id="edit-list" role="radiogroup" aria-labelledby="edit-list-label">
-                    <button type="button" class="seg-opt" role="radio" data-list="regular">Regular <span class="seg-sub">se repone</span></button>
-                    <button type="button" class="seg-opt" role="radio" data-list="once">Una vez</button>
-                    <button type="button" class="seg-opt" role="radio" data-list="books">Libro</button>
-                </div>
+                <div class="seg seg-lists" id="edit-list" role="radiogroup" aria-labelledby="edit-list-label"></div>
             </div>
             <div class="field" id="edit-level-field">
                 <div class="level-head">
@@ -380,6 +369,73 @@ if (!isAuthenticated()) {
             <label for="scanner-code" class="sr-only">Número del código de barras</label>
             <input type="text" id="scanner-code" inputmode="numeric" autocomplete="off" placeholder="…o escribe el número">
             <button type="submit">Usar</button>
+        </form>
+    </div>
+
+    <!-- Sheet: crear / editar lista -->
+    <div id="list-sheet" class="sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="list-sheet-title">
+        <div class="sheet-handle"></div>
+        <h3 class="sheet-title" id="list-sheet-title">Nueva lista</h3>
+        <form class="form" onsubmit="app.saveList(event)">
+            <input type="hidden" id="list-id">
+            <div class="field">
+                <label for="list-name">Nombre</label>
+                <input type="text" id="list-name" placeholder="Ej. Regalos de Navidad" maxlength="60" required autocomplete="off">
+            </div>
+            <div class="field">
+                <span class="field-label" id="list-type-label">Tipo</span>
+                <div class="type-opts" id="list-type" role="radiogroup" aria-labelledby="list-type-label">
+                    <button type="button" class="type-opt" role="radio" data-type="restock"><strong>Se repone</strong><span>Aparece en Falta e Inventario, con nivel de stock.</span></button>
+                    <button type="button" class="type-opt" role="radio" data-type="single"><strong>Compra única</strong><span>Aparece en Falta hasta comprarla; luego queda guardada.</span></button>
+                    <button type="button" class="type-opt" role="radio" data-type="collection"><strong>Colección / deseos</strong><span>Solo en su sección: lo quiero / lo tengo.</span></button>
+                </div>
+                <p class="field-hint" id="list-type-hint" hidden>Hogar siempre es del tipo "Se repone".</p>
+            </div>
+            <div class="field">
+                <span class="field-label" id="list-icon-label">Icono</span>
+                <div class="icon-grid" id="list-icon" role="radiogroup" aria-labelledby="list-icon-label"><button type="button" class="icon-opt" role="radio" data-icon="house" aria-label="Casa"></button><button type="button" class="icon-opt" role="radio" data-icon="tag" aria-label="Etiqueta"></button><button type="button" class="icon-opt" role="radio" data-icon="book" aria-label="Libro"></button><button type="button" class="icon-opt" role="radio" data-icon="gift" aria-label="Regalo"></button><button type="button" class="icon-opt" role="radio" data-icon="plane" aria-label="Viaje"></button><button type="button" class="icon-opt" role="radio" data-icon="heart" aria-label="Corazón"></button><button type="button" class="icon-opt" role="radio" data-icon="star" aria-label="Estrella"></button><button type="button" class="icon-opt" role="radio" data-icon="pill" aria-label="Farmacia"></button><button type="button" class="icon-opt" role="radio" data-icon="shirt" aria-label="Ropa"></button><button type="button" class="icon-opt" role="radio" data-icon="wrench" aria-label="Herramientas"></button><button type="button" class="icon-opt" role="radio" data-icon="paw" aria-label="Mascotas"></button><button type="button" class="icon-opt" role="radio" data-icon="sprout" aria-label="Jardín"></button><button type="button" class="icon-opt" role="radio" data-icon="briefcase" aria-label="Trabajo"></button><button type="button" class="icon-opt" role="radio" data-icon="gamepad" aria-label="Juegos"></button><button type="button" class="icon-opt" role="radio" data-icon="cart" aria-label="Compras"></button><button type="button" class="icon-opt" role="radio" data-icon="utensils" aria-label="Cocina"></button></div>
+            </div>
+            <div class="field">
+                <span class="field-label" id="list-color-label">Color</span>
+                <div class="color-grid" id="list-color" role="radiogroup" aria-labelledby="list-color-label"><button type="button" class="color-opt" role="radio" data-color="#3b82f6" style="--c:#3b82f6" aria-label="Azul"></button><button type="button" class="color-opt" role="radio" data-color="#8b5cf6" style="--c:#8b5cf6" aria-label="Violeta"></button><button type="button" class="color-opt" role="radio" data-color="#ec4899" style="--c:#ec4899" aria-label="Rosa"></button><button type="button" class="color-opt" role="radio" data-color="#ef4444" style="--c:#ef4444" aria-label="Rojo"></button><button type="button" class="color-opt" role="radio" data-color="#f59e0b" style="--c:#f59e0b" aria-label="Naranja"></button><button type="button" class="color-opt" role="radio" data-color="#10b981" style="--c:#10b981" aria-label="Verde"></button><button type="button" class="color-opt" role="radio" data-color="#06b6d4" style="--c:#06b6d4" aria-label="Turquesa"></button><button type="button" class="color-opt" role="radio" data-color="#64748b" style="--c:#64748b" aria-label="Gris"></button></div>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn-secondary" onclick="app.closeSheets()">Cancelar</button>
+                <button type="submit" class="btn-primary">Guardar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Sheet: opciones de una lista -->
+    <div id="list-menu-sheet" class="sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="list-menu-title">
+        <div class="sheet-handle"></div>
+        <h3 class="sheet-title" id="list-menu-title">Lista</h3>
+        <div class="menu-opts">
+            <button type="button" class="menu-opt" onclick="app.openListSheet(app.menuListId)"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>Editar lista</button>
+            <button type="button" class="menu-opt danger" id="list-menu-delete" onclick="app.openDeleteList(app.menuListId)"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Borrar lista…</button>
+            <p class="field-hint" id="list-menu-note" hidden>Hogar es la lista base: se puede editar, pero no borrar.</p>
+        </div>
+    </div>
+
+    <!-- Sheet: borrar lista (con varias confirmaciones) -->
+    <div id="list-delete-sheet" class="sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="list-delete-title">
+        <div class="sheet-handle"></div>
+        <h3 class="sheet-title danger-title" id="list-delete-title">Borrar lista</h3>
+        <form class="form" onsubmit="app.confirmDeleteList(event)">
+            <p class="delete-warning" id="list-delete-summary"></p>
+            <div class="field" id="list-delete-items">
+                <span class="field-label">¿Qué hacemos con sus artículos?</span>
+                <label class="radio-row"><input type="radio" name="list-delete-mode" value="move" checked><span>Moverlos a <select id="list-delete-target"></select></span></label>
+                <label class="radio-row danger"><input type="radio" name="list-delete-mode" value="delete"><span>Borrarlos también (<strong id="list-delete-count"></strong>)</span></label>
+            </div>
+            <div class="field">
+                <label for="list-delete-confirm">Para confirmar, escribe el nombre de la lista: <strong id="list-delete-name"></strong></label>
+                <input type="text" id="list-delete-confirm" autocomplete="off" autocapitalize="off" spellcheck="false">
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn-secondary" onclick="app.closeSheets()">Cancelar</button>
+                <button type="submit" class="btn-danger" id="list-delete-btn" disabled>Borrar lista</button>
+            </div>
         </form>
     </div>
 

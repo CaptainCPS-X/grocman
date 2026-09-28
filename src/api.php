@@ -305,7 +305,8 @@ function getDB() {
             'items' => [
                 ['name' => 'Leche', 'category' => 'Lácteos/Huevos', 'status' => 'needed', 'note' => '', 'price' => 0],
                 ['name' => 'Pan', 'category' => 'Panadería', 'status' => 'stocked', 'note' => '', 'price' => 0]
-            ]
+            ],
+            'lists' => DEFAULT_LISTS,
         ];
     }
     // Si el archivo existe pero no se puede leer, se aborta: nunca se sigue con
@@ -316,11 +317,20 @@ function getDB() {
         fail(500, 'No se pudo leer la lista. No se guardó nada.');
     }
     $db['version'] = (int)($db['version'] ?? 1);
+    $db['lists'] = cleanLists($db['lists'] ?? null) ?? DEFAULT_LISTS;
     foreach ($db['items'] as &$it) {
         if (is_array($it)) { $it['category'] = (($it['list'] ?? '') === 'books') ? 'Libros' : categoryOf($it['category'] ?? null); }
     }
     unset($it);
     return $db;
+}
+
+// Copia puntual del estado actual (p. ej. antes de borrar una lista).
+function backupSnapshot($label) {
+    global $dataFile, $backupDir;
+    if (!file_exists($dataFile)) { return; }
+    if (!is_dir($backupDir) && !@mkdir($backupDir, 0755, true)) { return; }
+    @copy($dataFile, $backupDir . '/items-' . $label . '-' . date('Ymd-His') . '.json');
 }
 
 // Copia del estado actual una vez al día (antes del primer guardado del día).
@@ -390,8 +400,35 @@ function cleanBook($b) {
     return $out ?: null;
 }
 
+// Valida las listas; null si son inválidas. Hogar ('regular') debe existir y
+// es siempre del tipo "se repone".
+function cleanLists($lists) {
+    if (!is_array($lists) || array_values($lists) !== $lists || !$lists || count($lists) > LISTS_MAX) { return null; }
+    $out = []; $ids = []; $names = [];
+    foreach ($lists as $l) {
+        if (!is_array($l)) { return null; }
+        $id = $l['id'] ?? null;
+        $name = is_string($l['name'] ?? null) ? trim($l['name']) : '';
+        if (!is_string($id) || !preg_match('/^[a-z0-9-]{1,40}$/', $id) || isset($ids[$id])) { return null; }
+        if ($name === '' || strlen($name) > 240 || isset($names[strtolower($name)])) { return null; }
+        $type = in_array($l['type'] ?? null, LIST_TYPES, true) ? $l['type'] : null;
+        if ($type === null) { return null; }
+        if ($id === 'regular') { $type = 'restock'; }
+        $ids[$id] = true; $names[strtolower($name)] = true;
+        $out[] = [
+            'id' => $id, 'name' => $name, 'type' => $type,
+            'icon' => in_array($l['icon'] ?? null, LIST_ICONS, true) ? $l['icon'] : 'tag',
+            'color' => (is_string($l['color'] ?? null) && preg_match('/^#[0-9a-f]{6}$/i', $l['color'])) ? strtolower($l['color']) : '#64748b',
+        ];
+    }
+    return isset($ids['regular']) ? $out : null;
+}
+
 // Valida y normaliza los artículos que envía el cliente; null si son inválidos.
-function cleanItems($items) {
+// $lists: las listas vigentes (para el tipo de cada una).
+function cleanItems($items, $lists = DEFAULT_LISTS) {
+    $typeOf = [];
+    foreach ($lists as $l) { $typeOf[$l['id']] = $l['type']; }
     if (!is_array($items) || array_values($items) !== $items) { return null; }
     $out = [];
     $seen = [];
@@ -429,20 +466,24 @@ function cleanItems($items) {
         ];
         if ($barcodes) { $clean['barcodes'] = $barcodes; }
         // Lista: 'regular' (se repone; no se guarda el campo) o 'once' (compra de una vez).
+        // Lista: debe existir; si no (otro teléfono la borró), va a Hogar.
         $list = $it['list'] ?? 'regular';
-        if (!in_array($list, LISTS, true)) { return null; }
+        if (!is_string($list)) { return null; }
+        if (!isset($typeOf[$list])) { $list = 'regular'; }
+        $type = $typeOf[$list];
         if ($list !== 'regular') { $clean['list'] = $list; }
-        if ($list === 'books') {
-            $clean['category'] = 'Libros';
+        if ($list === 'books') { $clean['category'] = 'Libros'; }
+        if ($type === 'collection') {
+            // Colección: lo quiero / lo tengo; sin canasta ni carrito.
+            if ($clean['status'] === 'in_cart') { $clean['status'] = 'needed'; }
             $book = cleanBook($it['book'] ?? null);
             if ($book) { $clean['book'] = $book; }
         }
         // Canasta: por comprar y elegido para esta compra. "En el carrito" ya
         // implica estar en la canasta; lo que está en casa no puede estarlo.
-        // Los libros no usan canasta.
-        if (!empty($it['basket']) && $clean['status'] === 'needed' && $list !== 'books') { $clean['basket'] = true; }
+        if (!empty($it['basket']) && $clean['status'] === 'needed' && $type !== 'collection') { $clean['basket'] = true; }
         // Nivel en casa (0–100, de 10 en 10); ausente = sin seguimiento.
-        if (isset($it['level']) && $list === 'regular') {
+        if (isset($it['level']) && $type === 'restock') {
             $level = filter_var($it['level'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100]]);
             if ($level === false || $level % 10 !== 0) { return null; }
             $clean['level'] = $level;
@@ -485,11 +526,13 @@ if ($method === 'POST') {
         exit();
     }
     if (!is_array($input) || !isset($input['version']) || !is_numeric($input['version'])) { fail(400, 'Datos de entrada inválidos.'); }
-    $items = cleanItems($input['items'] ?? null);
-    if ($items === null) { fail(400, 'Artículos inválidos.'); }
-
     lockDB();
     $currentDB = getDB();
+    // Listas: si no se envían, se conservan las actuales.
+    $lists = array_key_exists('lists', $input) ? cleanLists($input['lists']) : $currentDB['lists'];
+    if ($lists === null) { fail(400, 'Listas inválidas.'); }
+    $items = cleanItems($input['items'] ?? null, $lists);
+    if ($items === null) { fail(400, 'Artículos inválidos.'); }
 
     // Optimistic Locking: verificar versión (dentro del bloqueo)
     if ((int)$input['version'] !== $currentDB['version']) {
@@ -498,10 +541,13 @@ if ($method === 'POST') {
         exit();
     }
 
-    $newState = ['version' => $currentDB['version'] + 1, 'items' => $items];
+    // Se borra una lista: copia de seguridad antes de guardar.
+    $newIds = array_column($lists, 'id');
+    if (array_diff(array_column($currentDB['lists'], 'id'), $newIds)) { backupSnapshot('antes-borrar-lista'); }
+    $newState = ['version' => $currentDB['version'] + 1, 'items' => $items, 'lists' => $lists];
     saveDB($newState);
     cleanupIcons($items);
-    echo json_encode(['status' => 'success', 'newVersion' => $newState['version'], 'items' => $items]);
+    echo json_encode(['status' => 'success', 'newVersion' => $newState['version'], 'items' => $items, 'lists' => $lists]);
     exit();
 }
 

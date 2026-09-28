@@ -27,4 +27,16 @@ const ITEM_NAME_MAX = 120;
 const ITEM_NOTE_MAX = 500;
 const ITEM_BARCODES_MAX = 30;       // productos asociados por artículo
 const BARCODE_LABEL_MAX = 200;
-const LISTS = ['regular', 'once', 'books'];   // se repone / compra de una vez / libros
+// Listas: las define el usuario (se guardan en items.json). Tres tipos:
+//   restock    se repone: Falta + Inventario, con nivel de stock (p. ej. Hogar)
+//   single     compra única: Falta hasta comprarla, luego queda guardada
+//   collection colección / deseos: solo en su sección (lo quiero / lo tengo)
+const LIST_TYPES = ['restock', 'single', 'collection'];
+const LIST_ICONS = ['house', 'tag', 'book', 'gift', 'plane', 'heart', 'star', 'pill', 'shirt', 'wrench', 'paw', 'sprout', 'briefcase', 'gamepad', 'cart', 'utensils'];
+const LISTS_MAX = 30;
+// Listas iniciales. 'regular' (Hogar) es obligatoria: no se puede borrar ni cambiar de tipo.
+const DEFAULT_LISTS = [
+    ['id' => 'regular', 'name' => 'Hogar', 'type' => 'restock', 'icon' => 'house', 'color' => '#3b82f6'],
+    ['id' => 'once', 'name' => 'Una vez', 'type' => 'single', 'icon' => 'tag', 'color' => '#8b5cf6'],
+    ['id' => 'books', 'name' => 'Libros', 'type' => 'collection', 'icon' => 'book', 'color' => '#f59e0b'],
+];
