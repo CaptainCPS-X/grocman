@@ -25,14 +25,14 @@ $backupKeep = 30; // días de backups diarios que se conservan
 // Viven en data/icons/ (data/ está bloqueado por .htaccess) y se sirven solo con
 // sesión, vía api.php?icon=<id>. Dos tamaños por imagen, con el mismo id:
 //   <id>.png   miniatura 128×128 (fondo transparente) para las filas
-//   <id>-l.jpg versión grande (hasta 640px) para la vista previa
+//   <id>-l.jpg versión grande (hasta 1600px) para la vista previa y el visor
 // El navegador ya las manda ajustadas; aquí se valida que sean imágenes reales
 // y se recodifican con GD si está disponible.
 $iconDir = __DIR__ . '/data/icons';
 const ICON_MAX_BYTES = 200000;
 const ICON_MAX_SIDE = 256;
-const ICON_LARGE_MAX_BYTES = 400000;
-const ICON_LARGE_MAX_SIDE = 1024;
+const ICON_LARGE_MAX_BYTES = 1500000;
+const ICON_LARGE_MAX_SIDE = 2000;
 const ICON_ORPHAN_GRACE = 3600; // una imagen subida pero aún no guardada vive 1h
 
 function iconIdValid($id) { return is_string($id) && preg_match('/^[a-f0-9]{16}$/', $id); }
@@ -81,7 +81,7 @@ function decodeUpload($dataUrl, $mime, $imageType, $maxBytes, $maxSide) {
             imagesavealpha($im, true);
             imagepng($im);
         } else {
-            imagejpeg($im, null, 85);
+            imagejpeg($im, null, 90);
         }
         $bin = ob_get_clean();
         imagedestroy($im);
@@ -372,7 +372,9 @@ function gbooksIdValid($id) { return is_string($id) && preg_match('/^[A-Za-z0-9_
 // misma proporción que la miniatura, que siempre es la portada real.
 const GBOOKS_PLACEHOLDERS = ['c96309220b9cbd205c36d879d09a3647', 'a64fa89d7ebc97075c1d363fc5fea71f'];
 function gbooksCover($id, $zoom) {
-    $url = gbooksCoverUrl() . '?' . http_build_query(['id' => $id, 'printsec' => 'frontcover', 'img' => 1, 'zoom' => $zoom]);
+    $q = ['id' => $id, 'printsec' => 'frontcover', 'img' => 1, 'zoom' => $zoom === 'fife' ? 1 : $zoom];
+    if ($zoom === 'fife') { $q['fife'] = 'w1200-h1800'; }
+    $url = gbooksCoverUrl() . '?' . http_build_query($q);
     $r = httpGet($url, PRODUCT_IMAGE_MAX_BYTES);
     $info = $r['ok'] && $r['status'] === 200 ? @getimagesizefromstring($r['body']) : false;
     if (!$info || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP, IMAGETYPE_GIF], true) || $info[0] < 40 || $info[1] < 40) { return null; }
@@ -386,10 +388,13 @@ function serveGoogleCover($id, $size) {
     if (!$thumb) { fail(404, 'Sin portada.'); }
     $best = $thumb;
     if ($size === 'l') {
+        // 'fife' pide hasta 1200×1800 (Google entrega lo máximo que tenga);
+        // zoom 3 como respaldo. Gana la más grande con la proporción correcta.
         $ratio = $thumb['h'] / $thumb['w'];
-        foreach ([3, 2] as $zoom) {
+        foreach (['fife', 3] as $zoom) {
             $c = gbooksCover($id, $zoom);
-            if ($c && $c['w'] > $thumb['w'] && abs($c['h'] / $c['w'] - $ratio) / $ratio < 0.06) { $best = $c; break; }
+            if ($c && $c['w'] > $best['w'] && abs($c['h'] / $c['w'] - $ratio) / $ratio < 0.06) { $best = $c; }
+            if ($best['w'] >= 800) { break; }
         }
     }
     session_write_close();

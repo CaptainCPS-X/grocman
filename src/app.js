@@ -96,6 +96,17 @@ const app = {
         document.getElementById('edit-level-on').addEventListener('change', app.updateLevelField);
         document.getElementById('edit-level').addEventListener('input', (e) => { document.getElementById('edit-level-out').textContent = e.target.value + '%'; });
         document.getElementById('level-range').addEventListener('input', (e) => app.showLevel(+e.target.value));
+        // Portada de la vista previa → visor. Se detecta el toque con pointer
+        // events: tras un gesto (p. ej. deslizar para cerrar el visor) Chrome a
+        // veces no genera el click del siguiente toque.
+        const lbImg = document.getElementById('lightbox-img');
+        lbImg.addEventListener('pointerdown', (e) => { app.lbTap = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+        lbImg.addEventListener('pointerup', (e) => {
+            const t = app.lbTap; app.lbTap = null;
+            if (t && Date.now() - t.t < 600 && Math.hypot(e.clientX - t.x, e.clientY - t.y) < 12) app.openCoverViewer();
+        });
+        lbImg.addEventListener('click', () => app.openCoverViewer());
+        lbImg.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); app.openCoverViewer(); } });
         document.getElementById('lightbox-img').addEventListener('error', (e) => {
             // Imágenes subidas antes de la vista previa: solo tienen la miniatura.
             const img = e.target;
@@ -898,6 +909,119 @@ const app = {
         }
         return (app.foodCache[code] = null);
     },
+    // --- VISOR DE LA IMAGEN (desde la vista previa) ---
+    // Solo la imagen a pantalla completa. Pellizcar / rueda para acercar (hasta
+    // 4×), arrastrar para recorrerla, doble toque para acercar donde se toca.
+    // Se cierra con ✕, Escape, un toque sin zoom o deslizando hacia abajo.
+    openCoverViewer: () => {
+        const src = document.getElementById('lightbox-img');
+        const box = document.getElementById('cover-viewer'), img = document.getElementById('cover-viewer-img');
+        if (src.hidden || !src.currentSrc || !box.hidden) return;
+        img.src = src.currentSrc;
+        img.alt = src.alt;
+        box.hidden = false;
+        box.style.background = '';
+        app.cv = { s: 1, x: 0, y: 0, pts: new Map(), lastTap: 0, drag: 0 };
+        app.cvApply();
+        box.querySelector('.cv-close').focus({ preventScroll: true });
+        if (!app.cvInit) app.initCoverViewer();
+    },
+    closeCoverViewer: () => {
+        const box = document.getElementById('cover-viewer');
+        if (box.hidden) return;
+        box.hidden = true;
+        document.getElementById('cover-viewer-img').removeAttribute('src');
+        document.querySelector('#lightbox .lightbox-close').focus({ preventScroll: true });
+    },
+    cvApply: (anim) => {
+        const img = document.getElementById('cover-viewer-img'), v = app.cv;
+        img.style.transition = anim ? 'transform 0.22s ease' : 'none';
+        img.style.transform = `translate(${v.x}px, ${v.y + v.drag}px) scale(${v.s})`;
+        const box = document.getElementById('cover-viewer');
+        box.style.background = v.drag > 0 ? `rgba(0, 0, 0, ${Math.max(0.3, 0.96 - v.drag / 400)})` : '';
+        document.getElementById('cover-viewer-hint').classList.toggle('gone', v.s > 1 || v.drag > 0);
+    },
+    // Mantiene la imagen dentro de la pantalla según el zoom.
+    cvClamp: () => {
+        const v = app.cv, img = document.getElementById('cover-viewer-img');
+        if (v.s <= 1) { v.s = 1; v.x = 0; v.y = 0; return; }
+        const mx = Math.max(0, (img.offsetWidth * v.s - innerWidth) / 2), my = Math.max(0, (img.offsetHeight * v.s - innerHeight) / 2);
+        v.x = Math.min(mx, Math.max(-mx, v.x)); v.y = Math.min(my, Math.max(-my, v.y));
+    },
+    // Zoom a escala s manteniendo quieto el punto (px, py) de la pantalla.
+    cvZoomAt: (s, px, py) => {
+        const v = app.cv;
+        s = Math.min(4, Math.max(1, s));
+        const cx = px - innerWidth / 2, cy = py - innerHeight / 2;
+        v.x = cx - (cx - v.x) * (s / v.s); v.y = cy - (cy - v.y) * (s / v.s);
+        v.s = s;
+        app.cvClamp();
+    },
+    initCoverViewer: () => {
+        app.cvInit = true;
+        const box = document.getElementById('cover-viewer');
+        const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+        box.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.cv-close')) return;
+            const v = app.cv;
+            box.setPointerCapture(e.pointerId);
+            v.pts.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
+            if (v.pts.size === 2) {
+                const [a, b] = [...v.pts.values()];
+                v.pinch = { d: dist(a, b), s: v.s }; v.drag = 0;
+            }
+            v.moved = false;
+        });
+        box.addEventListener('pointermove', (e) => {
+            const v = app.cv, p = v.pts.get(e.pointerId);
+            if (!p) return;
+            const dx = e.clientX - p.x, dy = e.clientY - p.y;
+            p.x = e.clientX; p.y = e.clientY;
+            if (Math.hypot(p.x - p.x0, p.y - p.y0) > 8) v.moved = true;
+            if (v.pts.size === 2 && v.pinch) {
+                const [a, b] = [...v.pts.values()];
+                app.cvZoomAt(v.pinch.s * dist(a, b) / v.pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+            } else if (v.pts.size === 1) {
+                if (v.s > 1) { v.x += dx; v.y += dy; app.cvClamp(); }
+                else if (v.moved) v.drag = Math.max(0, v.drag + dy); // deslizar hacia abajo para cerrar
+            }
+            app.cvApply();
+        });
+        const up = (e) => {
+            const v = app.cv;
+            if (!v.pts.has(e.pointerId)) return;
+            v.pts.delete(e.pointerId);
+            if (v.pts.size < 2) v.pinch = null;
+            if (v.pts.size) return;
+            if (v.drag > 0) {
+                if (v.drag > 110) { app.closeCoverViewer(); return; }
+                v.drag = 0; app.cvApply(true); return;
+            }
+            if (v.moved || e.type === 'pointercancel') return;
+            // Toque: doble toque = zoom; un toque sin zoom (fuera de la imagen) cierra.
+            const now = Date.now();
+            if (now - v.lastTap < 300) {
+                v.lastTap = 0; clearTimeout(v.tapTimer);
+                if (v.s > 1) { v.s = 1; app.cvClamp(); } else app.cvZoomAt(2.5, e.clientX, e.clientY);
+                app.cvApply(true);
+            } else {
+                v.lastTap = now;
+                const r = document.getElementById('cover-viewer-img').getBoundingClientRect();
+                const onImg = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+                clearTimeout(v.tapTimer);
+                if (!onImg && v.s === 1) v.tapTimer = setTimeout(() => { if (v.lastTap === now) app.closeCoverViewer(); }, 300);
+            }
+        };
+        box.addEventListener('pointerup', up);
+        box.addEventListener('pointercancel', up);
+        box.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            app.cvZoomAt(app.cv.s * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY);
+            app.cvApply();
+        }, { passive: false });
+        window.addEventListener('resize', () => { if (!box.hidden) { app.cvClamp(); app.cvApply(); } });
+    },
+
     // Botón ✎ de la vista previa: cierra y abre Editar.
     editFromLightbox: () => {
         const name = app.lightboxName;
@@ -1749,7 +1873,7 @@ const app = {
     // src: archivo elegido (File) o URL de una foto de producto (Open Food Facts
     // con CORS, o api.php?productImage= del propio servidor). Devuelve
     // { thumb: PNG 128×128 transparente, large: JPEG de hasta 640px }.
-    ICON_LARGE: 640,
+    ICON_LARGE: 1600,
     toIconImages: (src, crop = null) => new Promise((resolve, reject) => {
         const isFile = src instanceof Blob;
         if (isFile && !/^image\//.test(src.type)) { reject(new Error('Elige una imagen.')); return; }
@@ -1770,7 +1894,7 @@ const app = {
                 const tc = t.getContext('2d');
                 tc.imageSmoothingQuality = 'high';
                 tc.drawImage(img, r.sx, r.sy, r.sw, r.sh, 0, 0, S, S);
-                // Versión grande (vista previa): la imagen completa, hasta 640px.
+                // Versión grande (vista previa y visor): la imagen completa, hasta 1600px.
                 const L = Math.min(1, app.ICON_LARGE / Math.max(iw, ih));
                 const l = document.createElement('canvas');
                 l.width = Math.max(1, Math.round(iw * L)); l.height = Math.max(1, Math.round(ih * L));
@@ -1779,7 +1903,10 @@ const app = {
                 lc.fillRect(0, 0, l.width, l.height);
                 lc.imageSmoothingQuality = 'high';
                 lc.drawImage(img, 0, 0, l.width, l.height);
-                resolve({ thumb: t.toDataURL('image/png'), large: l.toDataURL('image/jpeg', 0.85) });
+                // Fotos muy detalladas: se baja la calidad hasta caber en el límite del servidor (1.5 MB).
+                let large = '';
+                for (const q of [0.9, 0.82, 0.72, 0.6]) { large = l.toDataURL('image/jpeg', q); if (large.length * 0.75 < 1.3e6) break; }
+                resolve({ thumb: t.toDataURL('image/png'), large });
             } catch (e) { reject(new Error('No se pudo usar esa imagen.')); }
         };
         img.onerror = () => { if (isFile) URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
@@ -2022,6 +2149,10 @@ const app = {
             else if (e.key === 'Tab') app.trapTab(document.getElementById('cropper'), e);
             return;
         }
+        if (!document.getElementById('cover-viewer').hidden) {
+            if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); if (e.key === 'Escape') app.closeCoverViewer(); }
+            return;
+        }
         if (!document.getElementById('lightbox').hidden) {
             if (e.key === 'Escape') { e.preventDefault(); app.closeLightbox(); }
             else if (e.key === 'Tab') app.trapTab(document.getElementById('lightbox'), e);
@@ -2039,7 +2170,7 @@ const app = {
     },
     trapTab: (open, e) => {
         // getClientRects: visible (offsetParent no sirve dentro de contenedores fixed)
-        const f = [...open.querySelectorAll('button, input:not([type=hidden]), select, textarea')].filter(el => !el.disabled && el.getClientRects().length > 0);
+        const f = [...open.querySelectorAll('button, input:not([type=hidden]), select, textarea, [tabindex="0"]')].filter(el => !el.disabled && el.getClientRects().length > 0);
         if (!f.length) return;
         const first = f[0], last = f[f.length - 1];
         if (!open.contains(document.activeElement)) { e.preventDefault(); first.focus(); }

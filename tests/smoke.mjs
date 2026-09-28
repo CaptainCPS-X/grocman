@@ -83,8 +83,10 @@ const upcServer = http.createServer((req, res) => {
         const id = url.searchParams.get('id'), zoom = url.searchParams.get('zoom');
         const png = (w, h) => { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(pngOf(w, h)); };
         // Aviso "image not available" de Google: otra proporción que la portada.
-        if (id === 'GbMan3at3r') return zoom === '3' ? png(575, 750) : zoom === '2' ? png(300, 450) : png(128, 192);
-        if (id === 'SoloMiniat') return zoom === '1' ? png(128, 190) : zoom === '2' ? png(300, 48) : png(575, 750);
+        const fife = url.searchParams.get('fife');
+        if (id === 'GbMan3at3r') return fife ? png(300, 450) : zoom === '3' ? png(575, 750) : png(128, 192);
+        if (id === 'AltaResol1') return fife ? png(1166, 1800) : zoom === '3' ? png(575, 888) : png(128, 198);
+        if (id === 'SoloMiniat') return url.searchParams.get('fife') ? png(1200, 1565) : zoom === '1' ? png(128, 190) : png(575, 750);
         res.writeHead(404); return res.end();
     }
     if (url.pathname === '/redir') { res.writeHead(302, { Location: `${UPC}/img.png` }); return res.end(); }
@@ -301,7 +303,9 @@ try {
     check('búsqueda vacía → 400', (await request('/api.php?books=')).status === 400);
     const cov = await fetch(`${BASE}/api.php?bookCover=GbMan3at3r&size=l`, { headers: { Cookie: cookieHeader() } });
     const pngWidth = async (r) => Buffer.from(await r.arrayBuffer()).readUInt32BE(16);
-    check('portada grande: salta el aviso (otra proporción) y sirve zoom 2', cov.status === 200 && await pngWidth(cov) === 300);
+    check('portada grande: salta el aviso (otra proporción) y sirve la de fife', cov.status === 200 && await pngWidth(cov) === 300);
+    const hi = await fetch(`${BASE}/api.php?bookCover=AltaResol1&size=l`, { headers: { Cookie: cookieHeader() } });
+    check('portada grande: alta resolución (fife 1166 px)', hi.status === 200 && await pngWidth(hi) === 1166);
     const only = await fetch(`${BASE}/api.php?bookCover=SoloMiniat&size=l`, { headers: { Cookie: cookieHeader() } });
     check('portada grande: si solo hay avisos, sirve la miniatura real', only.status === 200 && await pngWidth(only) === 128);
     const small = await fetch(`${BASE}/api.php?bookCover=GbMan3at3r`, { headers: { Cookie: cookieHeader() } });
