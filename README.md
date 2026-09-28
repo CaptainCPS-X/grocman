@@ -30,6 +30,11 @@ Barra inferior: **Falta · Canasta · Inventario · Listas · Agregar**.
   - **Colección / deseos** (`collection`, p. ej. Libros): solo en su sección,
     "Lo quiero" / "Lo tengo". Al escanear un ISBN (978/979) se buscan título,
     autor, año, páginas, editorial y portada en **Open Library** y va a Libros.
+    Sin el libro a mano, **Buscar libro** (en Agregar al elegir una colección,
+    o junto a "Agregar a …" en su detalle) busca por título y/o autor en Open
+    Library con la portada de cada resultado; al elegir uno se llenan título,
+    autor, año, ISBN y portada (de la edición de esa portada) para revisarlos
+    antes de guardar. Los que ya están aparecen marcados "Ya está en …".
 
   **Hogar** es la lista base: se puede editar, pero no borrar ni cambiar de
   tipo. Borrar una lista pide escribir su nombre exacto; por defecto sus

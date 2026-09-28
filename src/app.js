@@ -14,6 +14,7 @@ const app = {
         flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
         barcode: '<path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+        search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
         pencil: '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>',
         trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>'
     },
@@ -436,7 +437,10 @@ const app = {
             <div class="lh-title"><h2>${app.esc(l.name)}</h2><span>${app.TYPE_LABEL[l.type]} · ${its.length} artículo${its.length === 1 ? '' : 's'}</span></div>
             <button type="button" class="lh-menu" data-action="menu" aria-label="Opciones de la lista">${app.svgIcon('dots')}</button>
         </div>
-        <button type="button" class="list-add" data-action="add">${app.svgIcon('plus')}Agregar a ${app.esc(l.name)}</button>`;
+        <div class="list-actions">
+            <button type="button" class="list-add" data-action="add">${app.svgIcon('plus')}Agregar a ${app.esc(l.name)}</button>
+            ${l.type === 'collection' ? `<button type="button" class="list-add list-search" data-action="search">${app.svgIcon('search')}Buscar libro</button>` : ''}
+        </div>`;
         if (!its.length) { c.innerHTML = head + '<div class="view-empty">Esta lista está vacía.</div>'; return; }
         const row = (item, labels) => {
             const pending = item.status !== 'stocked', name = app.esc(item.name), b = item.book || {};
@@ -470,6 +474,7 @@ const app = {
             if (a === 'back') { app.openListId = null; app.renderLists(); }
             else if (a === 'menu') app.openListMenu(app.openListId);
             else if (a === 'add') app.openAddSheet(app.openListId);
+            else if (a === 'search') app.openBookSearch(app.openListId);
             return;
         }
         const el = e.target.closest('.inv-item');
@@ -771,6 +776,10 @@ const app = {
         const list = app.segValue(`${p}-list`), type = (app.listById(list) || {}).type;
         document.getElementById(`${p}-cat-field`).hidden = list === 'books';
         document.getElementById(`${p}-author-field`).hidden = type !== 'collection';
+        if (p === 'new') {
+            document.getElementById('new-booksearch').hidden = type !== 'collection';
+            document.querySelector('#add-sheet .scan-row .btn-scan span').textContent = type === 'collection' ? 'Escanear' : 'Escanear producto';
+        }
         if (p === 'edit') app.updateLevelField();
     },
     updateLevelField: () => {
@@ -949,7 +958,7 @@ const app = {
             if (authors.length) book.authors = authors; else delete book.authors;
             if (Object.keys(book).length) newItem.book = book;
         }
-        const barcodes = app.addBarcodes.map(({ code, label }) => ({ code, label }));
+        const barcodes = app.addBarcodes.filter(b => b.code).map(({ code, label }) => ({ code, label }));
         if (barcodes.length) newItem.barcodes = barcodes;
         if (app.iconPickers.new.get()) newItem.icon = app.iconPickers.new.get();
         const codes = new Set(barcodes.map(b => b.code));
@@ -1421,6 +1430,141 @@ const app = {
         } else {
             app.showToast('Libro no encontrado: escribe el título');
         }
+        app.renderBarcodes('add');
+    },
+
+    // --- BUSCAR UN LIBRO POR TÍTULO / AUTOR (Open Library) ---
+    // from: 'add' (desde la hoja Agregar, se vuelve a ella) o el id de la lista
+    // de colección donde se agregará.
+    openBookSearch: (from) => {
+        app.bookSearch = { from, q: '', page: 1, docs: [], more: false, seq: 0 };
+        document.getElementById('book-search-input').value = '';
+        document.getElementById('book-results').innerHTML = '<p class="bs-hint">Escribe el título o el autor (o ambos).</p>';
+        app.openSheet('book-search-sheet', { focusField: true });
+    },
+    closeBookSearch: () => {
+        clearTimeout(app.bookSearchTimer);
+        if (app.bookSearch) app.bookSearch.seq++;
+        if (app.bookSearch && app.bookSearch.from === 'add') app.openSheet('add-sheet', { focusField: false });
+        else app.closeSheets();
+    },
+    onBookSearchInput: () => {
+        clearTimeout(app.bookSearchTimer);
+        const q = document.getElementById('book-search-input').value.trim();
+        if (q.length < 3) {
+            app.bookSearch.seq++;
+            document.getElementById('book-results').innerHTML = '<p class="bs-hint">Escribe el título o el autor (o ambos).</p>';
+            return;
+        }
+        app.bookSearchTimer = setTimeout(() => app.runBookSearch(q, 1), 450);
+    },
+    runBookSearch: async (q, page) => {
+        const bs = app.bookSearch, seq = ++bs.seq, box = document.getElementById('book-results');
+        if (page === 1) box.innerHTML = '<p class="bs-hint">Buscando…</p>';
+        else { const m = box.querySelector('.bs-more'); if (m) { m.disabled = true; m.textContent = 'Cargando…'; } }
+        const fields = 'key,title,author_name,first_publish_year,cover_i,cover_edition_key,isbn,number_of_pages_median';
+        let j = null;
+        try {
+            const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&fields=${fields}&limit=10&page=${page}`);
+            if (r.ok) j = await r.json();
+        } catch (e) { }
+        if (seq !== bs.seq) return; // llegó una búsqueda más nueva (o se cerró)
+        if (!j) { box.innerHTML = '<p class="bs-hint">No se pudo buscar. Revisa la conexión e intenta otra vez.</p>'; return; }
+        // Primero los que tienen portada; sin repetir la misma obra.
+        const prev = page === 1 ? [] : bs.docs;
+        const docs = (j.docs || []).filter(d => d.title && !prev.some(x => x.key === d.key));
+        docs.sort((a, b) => (b.cover_i ? 1 : 0) - (a.cover_i ? 1 : 0));
+        bs.q = q; bs.page = page;
+        bs.docs = prev.concat(docs);
+        bs.more = page * 10 < (j.numFound || 0) && page < 5;
+        app.renderBookResults();
+    },
+    // ISBN-13 de un resultado (uno de 10 dígitos se convierte).
+    docISBN: (d) => {
+        const all = d.isbn || [];
+        const x = all.find(c => app.isISBN(c));
+        if (x) return x;
+        const ten = all.find(c => /^\d{9}[\dX]$/.test(c));
+        if (!ten) return '';
+        const b = '978' + ten.slice(0, 9);
+        const sum = [...b].reduce((s, ch, i) => s + (+ch) * (i % 2 ? 3 : 1), 0);
+        return b + ((10 - sum % 10) % 10);
+    },
+    // ¿Ya está este libro? (el ISBN de alguna edición, o el mismo título en una colección)
+    bookOwner: (d) => {
+        const isbns = new Set(d.isbn || []);
+        const title = d.title.toLowerCase();
+        return app.data.items.find(i => (i.barcodes || []).some(b => isbns.has(b.code))
+            || (i.name.toLowerCase() === title && app.isBook(i)));
+    },
+    renderBookResults: () => {
+        const bs = app.bookSearch, box = document.getElementById('book-results');
+        if (!bs.docs.length) { box.innerHTML = '<p class="bs-hint">Sin resultados. Prueba con otras palabras.</p>'; return; }
+        box.innerHTML = bs.docs.map((d, i) => {
+            const owner = app.bookOwner(d);
+            const cover = d.cover_i
+                ? `<img src="https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg" alt="" loading="lazy" decoding="async">`
+                : app.catIcon('Libros');
+            const meta = [(d.author_name || []).slice(0, 2).join(', '), d.first_publish_year].filter(Boolean).join(' · ');
+            return `<button type="button" class="bs-row${owner ? ' owned' : ''}" data-i="${i}">
+                <span class="bs-cover">${cover}</span>
+                <span class="bs-text"><strong>${app.esc(d.title)}</strong><span>${app.esc(meta)}</span>${owner ? `<em>Ya está en ${app.esc((app.listOf(owner) || {}).name || 'tus listas')}</em>` : ''}</span>
+            </button>`;
+        }).join('') + (bs.more ? '<button type="button" class="btn-secondary bs-more">Ver más</button>' : '');
+    },
+    onBookResultsClick: (e) => {
+        const bs = app.bookSearch;
+        if (e.target.closest('.bs-more')) { app.runBookSearch(bs.q, bs.page + 1); return; }
+        const row = e.target.closest('.bs-row');
+        if (!row) return;
+        const d = bs.docs[+row.dataset.i];
+        const owner = d && app.bookOwner(d);
+        if (owner) { app.showToast(`Ese libro ya está como "${owner.name}"`); return; }
+        if (d) app.pickBook(d);
+    },
+    // Rellena la hoja Agregar con el libro elegido (se revisa antes de guardar).
+    // ISBN, editorial y páginas salen de la edición de la portada mostrada.
+    pickBook: async (d) => {
+        const bs = app.bookSearch;
+        bs.seq++;
+        if (bs.from === 'add') app.openSheet('add-sheet', { focusField: false });
+        else app.openAddSheet(bs.from);
+        const list = app.listById(app.segValue('new-list'));
+        if (!list || list.type !== 'collection') {
+            const books = app.listById('books') || app.data.lists.find(l => l.type === 'collection');
+            if (books) app.setSeg('new-list', books.id);
+        }
+        app.updateListFields('new');
+        const authors = (d.author_name || []).slice(0, 3);
+        document.getElementById('new-name').value = d.title;
+        document.getElementById('new-author').value = authors.join(', ');
+        app.iconPickers.new.set(null);
+        if (d.cover_i) app.iconPickers.new.fromURL(`https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg`);
+        const label = [d.title, authors.join(', ')].filter(Boolean).join(' · ');
+        const entry = { code: '', label, loading: true };
+        app.addBarcodes = app.addBarcodes.filter(b => !app.isISBN(b.code));
+        app.addBook = { year: d.first_publish_year ? String(d.first_publish_year) : undefined, pages: d.number_of_pages_median || undefined };
+        const pick = app.pickSeq = (app.pickSeq || 0) + 1;
+        let ed = null;
+        if (d.cover_edition_key) {
+            app.addBarcodes.push(entry);
+            app.renderBarcodes('add');
+            try {
+                const r = await fetch(`https://openlibrary.org/books/${encodeURIComponent(d.cover_edition_key)}.json`);
+                if (r.ok) ed = await r.json();
+            } catch (e) { }
+            if (pick !== app.pickSeq) return; // se eligió otro libro mientras tanto
+            app.addBarcodes = app.addBarcodes.filter(b => b !== entry);
+        }
+        const isbn = (ed && app.docISBN({ isbn: [...(ed.isbn_13 || []), ...(ed.isbn_10 || [])] })) || app.docISBN(d);
+        if (ed) {
+            if (ed.number_of_pages) app.addBook.pages = ed.number_of_pages;
+            if ((ed.publishers || [])[0]) app.addBook.publisher = ed.publishers[0];
+        }
+        Object.keys(app.addBook).forEach(k => app.addBook[k] === undefined && delete app.addBook[k]);
+        const owner = isbn && app.data.items.find(i => (i.barcodes || []).some(b => b.code === isbn));
+        if (owner) app.showToast(`Ese libro ya está como "${owner.name}"`);
+        else if (isbn) app.addBarcodes.push({ code: isbn, label });
         app.renderBarcodes('add');
     },
 
