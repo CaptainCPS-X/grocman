@@ -15,20 +15,28 @@ const app = {
         trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>'
     },
     CAT_ICONS: {
-        'Proteínas': '<circle cx="12.5" cy="8.5" r="2.5"/><path d="M12.5 2a6.5 6.5 0 0 0-6.22 4.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3A6.5 6.5 0 0 0 12.5 2Z"/><path d="m18.5 6 2.19 4.5a6.48 6.48 0 0 1 .31 2 6.49 6.49 0 0 1-2.6 5.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5"/>',
-        'Lácteos/Huevos': '<path d="M12 22c6.23-.05 7.87-5.57 7.5-10-.36-4.34-3.95-9.96-7.5-10-3.55.04-7.14 5.66-7.5 10-.37 4.43 1.27 9.95 7.5 10z"/>',
-        'Frutas/Verduras': '<path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/>',
+        'Frutas y Verduras': '<path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/>',
+        'Carnes y Mariscos': '<circle cx="12.5" cy="8.5" r="2.5"/><path d="M12.5 2a6.5 6.5 0 0 0-6.22 4.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3A6.5 6.5 0 0 0 12.5 2Z"/><path d="m18.5 6 2.19 4.5a6.48 6.48 0 0 1 .31 2 6.49 6.49 0 0 1-2.6 5.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5"/>',
+        'Lácteos y Huevos': '<path d="M12 22c6.23-.05 7.87-5.57 7.5-10-.36-4.34-3.95-9.96-7.5-10-3.55.04-7.14 5.66-7.5 10-.37 4.43 1.27 9.95 7.5 10z"/>',
         'Panadería': '<path d="m4.6 13.11 5.79-3.21c1.89-1.05 4.79 1.78 3.71 3.71l-3.22 5.81C8.8 23.16.79 15.23 4.6 13.11Z"/><path d="m10.5 9.5-1-2.29C9.2 6.48 8.8 6 8 6H4.5C2.79 6 2 6.5 2 8.5a7.71 7.71 0 0 0 2 4.83"/><path d="M8 6c0-1.55.24-4-2-4-2 0-2.5 2.17-2.5 4"/><path d="m14.5 13.5 2.29 1c.73.3 1.21.7 1.21 1.5v3.5c0 1.71-.5 2.5-2.5 2.5a7.71 7.71 0 0 1-4.83-2"/><path d="M18 16c1.55 0 4-.24 4 2 0 2-2.17 2.5-4 2.5"/>',
+        'Congelados': '<line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/>',
+        'Granos y Pastas': '<path d="M2 22 16 8"/><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="M7.47 8.53 9 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L9 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="M11.47 4.53 13 3l1.53 1.53a3.5 3.5 0 0 1 0 4.94L13 11l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="M20 2h2v2a4 4 0 0 1-4 4h-2V6a4 4 0 0 1 4-4Z"/>',
+        'Desayuno y Cereales': '<path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/>',
         'Bebidas': '<path d="m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8"/><path d="M5 8h14"/><path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0"/><path d="m12 8-1-6h2"/>',
-        'Limpieza': '<path d="M3 3h.01"/><path d="M7 5h.01"/><path d="M11 7h.01"/><path d="M3 7h.01"/><path d="M7 9h.01"/><path d="M3 11h.01"/><rect width="4" height="4" x="15" y="5"/><path d="m19 9 2 2v10c0 .6-.4 1-1 1h-6c-.6 0-1-.4-1-1V11l2-2"/><path d="M13 14h8"/>',
+        'Especias y Condimentos': '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
+        'Salsas y Aderezos': '<path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z"/><path d="M7 21h10"/><path d="M19.5 12 22 6"/><path d="M16.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.73 1.62"/><path d="M11.25 3c.27.1.8.53.74 1.36-.05.83-.93 1.2-.98 2.02-.06.78.33 1.24.72 1.62"/><path d="M6.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.74 1.62"/>',
         'Despensa': '<path d="m5 11 4-7"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4"/><path d="M4.5 15.5h15"/><path d="m9 11 1 9"/><path d="m15 11-1 9"/>',
-        'Higiene': '<path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/>',
-        'Otros': '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'
+        'Cuidado Personal': '<path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/>',
+        'Salud y Farmacia': '<path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/>',
+        'Limpieza y Hogar': '<path d="M3 3h.01"/><path d="M7 5h.01"/><path d="M11 7h.01"/><path d="M3 7h.01"/><path d="M7 9h.01"/><path d="M3 11h.01"/><rect width="4" height="4" x="15" y="5"/><path d="m19 9 2 2v10c0 .6-.4 1-1 1h-6c-.6 0-1-.4-1-1V11l2-2"/><path d="M13 14h8"/>',
+        'Libros': '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+        'Otros': '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
     },
     svgIcon: (name, cls = 'lucide') =>
         `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${app.ICONS[name] || ''}</svg>`,
+    LEGACY_CATS: { 'Proteínas': 'Carnes y Mariscos', 'Lácteos/Huevos': 'Lácteos y Huevos', 'Frutas/Verduras': 'Frutas y Verduras', 'Higiene': 'Cuidado Personal', 'Limpieza': 'Limpieza y Hogar' },
     catIcon: (cat) =>
-        `<svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${app.CAT_ICONS[cat] || app.CAT_ICONS['Otros']}</svg>`,
+        `<svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${app.CAT_ICONS[cat] || app.CAT_ICONS[app.LEGACY_CATS[cat]] || app.CAT_ICONS['Otros']}</svg>`,
 
     esc: (s) => String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -49,11 +57,20 @@ const app = {
 
     init: async () => {
         const shopping = document.getElementById('shopping-list-render');
+        const basket = document.getElementById('basket-list-render');
         const inventory = document.getElementById('inventory-list-render');
+        const books = document.getElementById('books-list-render');
         shopping.addEventListener('click', app.onShoppingClick);
+        basket.addEventListener('click', app.onBasketClick);
         inventory.addEventListener('click', app.onInventoryClick);
+        books.addEventListener('click', app.onBooksClick);
+        document.getElementById('falta-filter').addEventListener('click', (e) => {
+            const chip = e.target.closest('.chip');
+            if (chip) app.setFaltaFilter(chip.dataset.filter);
+        });
+        app.setFaltaFilter(app.faltaFilter, false);
         // Enter / Espacio en los elementos con role="button" (filas editables)
-        [shopping, inventory].forEach(el => el.addEventListener('keydown', (e) => {
+        [shopping, basket, inventory, books].forEach(el => el.addEventListener('keydown', (e) => {
             if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) {
                 e.preventDefault();
                 e.target.click();
@@ -62,18 +79,14 @@ const app = {
         document.addEventListener('keydown', app.onSheetKeydown);
         document.querySelector('.scanner-view').addEventListener('click', app.focusAt);
         app.iconPickers = { new: app.makeIconPicker('new'), edit: app.makeIconPicker('edit') };
-        ['shopping-list-render', 'inventory-list-render'].forEach(id => document.getElementById(id).addEventListener('toggle', app.onGroupToggle, true));
+        ['shopping-list-render', 'basket-list-render', 'inventory-list-render'].forEach(id => document.getElementById(id).addEventListener('toggle', app.onGroupToggle, true));
         app.initCropper();
-        document.getElementById('once-list-render').addEventListener('click', app.onOnceClick);
-        document.getElementById('once-list-render').addEventListener('keydown', (e) => {
-            if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) { e.preventDefault(); e.target.click(); }
-        });
-        // Selectores de lista (Regular / Una vez)
-        ['new-list', 'edit-list'].forEach(id => document.getElementById(id).addEventListener('click', (e) => {
+        // Selectores de lista (Regular / Una vez / Libro)
+        ['new', 'edit'].forEach(p => document.getElementById(`${p}-list`).addEventListener('click', (e) => {
             const opt = e.target.closest('.seg-opt');
             if (!opt) return;
-            app.setSeg(id, opt.dataset.list);
-            if (id === 'edit-list') app.updateLevelField();
+            app.setSeg(`${p}-list`, opt.dataset.list);
+            app.updateListFields(p);
         }));
         // Nivel en Editar: interruptor + slider
         document.getElementById('edit-level-on').addEventListener('change', app.updateLevelField);
@@ -179,12 +192,22 @@ const app = {
 
     render: () => {
         app.renderShopping();
+        app.renderBasket();
         app.renderInventory();
-        app.renderOnce();
+        app.renderBooks();
         app.updateTotal();
     },
 
     isOnce: (item) => item.list === 'once',
+    isBook: (item) => item.list === 'books',
+    // Canasta: elegido para esta compra (por comprar con marca, o ya en el carrito).
+    inBasket: (item) => item.status === 'in_cart' || (item.status === 'needed' && !!item.basket),
+    // Cambiar estado manteniendo la canasta coherente (en casa ⇒ fuera de la canasta).
+    withStatus: (item, status) => {
+        const out = { ...item, status };
+        if (status === 'stocked') delete out.basket;
+        return status === 'stocked' ? app.restocked(out) : out;
+    },
     // Al volver a tener el artículo en casa, su nivel vuelve a 100%.
     restocked: (item) => (Number.isInteger(item.level) && !app.isOnce(item)) ? { ...item, level: 100 } : item,
 
@@ -199,68 +222,170 @@ const app = {
 
     // --- TOTALES Y CHECKOUT ---
     updateTotal: () => {
-        const activeItems = app.data.items.filter(i => i.status === 'needed' || i.status === 'in_cart');
-        const totalList = activeItems.reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
-
-        const cartItems = app.data.items.filter(i => i.status === 'in_cart');
-        const totalCart = cartItems.reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
-
-        document.getElementById('total-amount').innerText = '$' + totalList.toFixed(2);
-
+        // Total de la canasta (lo elegido para esta compra) y lo ya en el carrito.
+        const basket = app.data.items.filter(app.inBasket);
+        const cart = basket.filter(i => i.status === 'in_cart');
+        const sum = (list) => list.reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
+        document.getElementById('total-amount').innerText = '$' + sum(basket).toFixed(2);
         const cartSubtotal = document.getElementById('cart-subtotal');
-        if (totalCart > 0) {
-            cartSubtotal.innerText = `En carrito: $${totalCart.toFixed(2)}`;
-            cartSubtotal.style.display = 'block';
-        } else {
-            cartSubtotal.style.display = 'none';
-        }
-
+        cartSubtotal.innerText = `En carrito: $${sum(cart).toFixed(2)} · ${cart.length} de ${basket.length}`;
+        cartSubtotal.style.display = cart.length ? 'block' : 'none';
         const btnCheckout = document.getElementById('btn-checkout');
-        if (cartItems.length > 0) {
-            btnCheckout.style.display = 'inline-flex';
-            document.getElementById('checkout-label').innerText = `Finalizar (${cartItems.length})`;
-        } else {
-            btnCheckout.style.display = 'none';
-        }
-
-        // La barra de total solo se ve en la pestaña Lista
-        const onShopping = !document.getElementById('view-shopping').classList.contains('hidden');
-        document.getElementById('total-bar').style.display = onShopping ? 'flex' : 'none';
+        btnCheckout.style.display = cart.length ? 'inline-flex' : 'none';
+        document.getElementById('checkout-label').innerText = `Finalizar (${cart.length})`;
+        document.getElementById('total-bar').style.display = app.currentTab === 'basket' && basket.length ? 'flex' : 'none';
+        const badge = document.getElementById('basket-count');
+        badge.hidden = !basket.length;
+        badge.textContent = basket.length;
     },
 
     checkout: async () => {
-        if (!confirm("¿Ya pagaste? Los artículos del carrito pasan al inventario.")) return;
-        const ok = await app.change(items => items.map(i => i.status === 'in_cart' ? app.restocked({ ...i, status: 'stocked' }) : i));
+        if (!confirm("¿Ya pagaste? Lo marcado pasa a \"en casa\"; lo demás se queda en la canasta.")) return;
+        // Lo marcado pasa a "en casa"; lo que no se encontró se queda en la canasta.
+        const ok = await app.change(items => items.map(i => i.status === 'in_cart' ? app.withStatus(i, 'stocked') : i));
         if (ok) app.showToast("¡Compra finalizada!");
     },
 
     // --- LISTA DE COMPRA ---
+    // --- FALTA: lo que se acabó o falta comprar (se vigila; no todo se compra) ---
+    // Cada fila tiene "+ Canasta" para elegir lo que se compra esta vez.
+    // Filtro: Todo / Regular / Una vez (con las compras de una vez ya guardadas).
+    FILTER_KEY: 'grocman.faltaFilter',
+    faltaFilter: (() => { try { return localStorage.getItem('grocman.faltaFilter') || 'all'; } catch (e) { return 'all'; } })(),
+    setFaltaFilter: (f, redraw = true) => {
+        app.faltaFilter = ['all', 'regular', 'once'].includes(f) ? f : 'all';
+        try { localStorage.setItem(app.FILTER_KEY, app.faltaFilter); } catch (e) { }
+        document.querySelectorAll('#falta-filter .chip').forEach(c => {
+            const on = c.dataset.filter === app.faltaFilter;
+            c.classList.toggle('active', on);
+            c.setAttribute('aria-checked', String(on));
+        });
+        if (redraw) app.renderShopping();
+    },
+    basketBtnHTML: (item) => {
+        const on = app.inBasket(item), name = app.esc(item.name);
+        return `<button type="button" class="basket-btn ${on ? 'on' : ''}" aria-pressed="${on}" aria-label="${on ? 'Sacar de la canasta' : 'Agregar a la canasta'}: ${name}">${on ? app.svgIcon('check') + 'Canasta' : '+ Canasta'}</button>`;
+    },
     renderShopping: () => {
         const container = document.getElementById('shopping-list-render');
-        const activeItems = app.data.items.filter(i => i.status === 'needed' || i.status === 'in_cart');
+        const f = app.faltaFilter;
+        const pending = app.data.items.filter(i => !app.isBook(i) && (i.status === 'needed' || i.status === 'in_cart')
+            && (f === 'all' || (f === 'once') === app.isOnce(i)));
+        const saved = f === 'once' ? app.data.items.filter(i => app.isOnce(i) && i.status === 'stocked').sort((a, b) => a.name.localeCompare(b.name)) : [];
 
-        if (activeItems.length === 0) {
-            container.innerHTML = '<div class="view-empty">🎉 Todo comprado</div>';
+        if (!pending.length && !saved.length) {
+            container.innerHTML = f === 'once'
+                ? '<div class="view-empty">Sin compras de una vez.<br><span class="view-empty-sub">Al agregar o editar un artículo, elige la lista "Una vez".</span></div>'
+                : '<div class="view-empty">🎉 No falta nada</div>';
             return;
         }
-
-        const groups = app.byCategory(activeItems);
-        let html = app.toolsHTML('shopping', groups.map(g => g.cat));
+        const groups = app.byCategory(pending);
+        let html = pending.length ? app.toolsHTML('shopping', groups.map(g => g.cat)) : '';
         for (const { cat, items } of groups) {
-            // Los que están en el carrito van al final de su categoría
-            items.sort((a, b) => (a.status === b.status ? 0 : (a.status === 'in_cart' ? 1 : -1)));
+            items.sort((a, b) => a.name.localeCompare(b.name));
             html += app.groupHTML('shopping', cat, items.length, items.map(item => {
-                const isInCart = item.status === 'in_cart';
-                const name = app.esc(item.name);
                 const detail = (item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : '') + app.levelBarHTML(item);
                 return `
-                <div class="item-row ${isInCart ? 'in-cart' : ''}" data-name="${name}">
+                <div class="item-row ${app.inBasket(item) ? 'in-basket' : ''}" data-name="${app.esc(item.name)}">
+                    ${app.rowMainHTML(item, 'item-main', detail, app.isOnce(item) && f !== 'once' ? '<span class="once-badge">Una vez</span>' : '')}
+                    ${app.basketBtnHTML(item)}
+                </div>`;
+            }).join(''));
+        }
+        if (saved.length) {
+            html += `<div class="cat-header once-saved">Guardadas<span class="cat-count">· ${saved.length}</span></div>` + saved.map(item => `
+                <div class="inv-item stocked" data-name="${app.esc(item.name)}">
+                    ${app.rowMainHTML(item, 'inv-main', `<div class="inv-cat">${app.esc(item.category)}</div>`)}
+                    <div class="inv-actions">
+                        <button type="button" class="inv-toggle pedir" aria-label="Pedir: ${app.esc(item.name)}">+ Pedir</button>
+                        <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${app.esc(item.name)}">${app.svgIcon('trash')}</button>
+                    </div>
+                </div>`).join('');
+        }
+        container.innerHTML = html;
+    },
+
+    // --- CANASTA: lo elegido para esta compra; en la tienda se marca ✓ ---
+    renderBasket: () => {
+        const container = document.getElementById('basket-list-render');
+        const items = app.data.items.filter(app.inBasket);
+        if (!items.length) {
+            container.innerHTML = '<div class="view-empty">La canasta está vacía.<br><span class="view-empty-sub">En "Falta", toca "+ Canasta" en lo que vas a comprar esta vez.</span></div>';
+            return;
+        }
+        const groups = app.byCategory(items);
+        let html = app.toolsHTML('basket', groups.map(g => g.cat));
+        for (const { cat, items: list } of groups) {
+            // Lo que ya está en el carrito va al final de su categoría.
+            list.sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : (a.status === 'in_cart' ? 1 : -1)));
+            html += app.groupHTML('basket', cat, list.length, list.map(item => {
+                const inCart = item.status === 'in_cart', name = app.esc(item.name);
+                const detail = item.note ? `<div class="item-note">${app.esc(item.note)}</div>` : '';
+                return `
+                <div class="item-row ${inCart ? 'in-cart' : ''}" data-name="${name}">
                     ${app.rowMainHTML(item, 'item-main', detail, app.isOnce(item) ? '<span class="once-badge">Una vez</span>' : '')}
-                    <button type="button" class="check-circle ${isInCart ? 'in-cart' : ''}" aria-pressed="${isInCart}" aria-label="${isInCart ? 'Sacar del carrito' : 'Poner en el carrito'}: ${name}">${app.svgIcon('check')}</button>
+                    <div class="basket-actions">
+                        <button type="button" class="check-circle ${inCart ? 'in-cart' : ''}" aria-pressed="${inCart}" aria-label="${inCart ? 'Sacar del carrito' : 'Poner en el carrito'}: ${name}">${app.svgIcon('check')}</button>
+                        <button type="button" class="basket-remove" title="Sacar de la canasta" aria-label="Sacar de la canasta: ${name}">${app.svgIcon('x')}</button>
+                    </div>
                 </div>`;
             }).join(''));
         }
         container.innerHTML = html;
+    },
+    onBasketClick: (e) => {
+        const all = e.target.closest('.collapse-all');
+        if (all) { app.toggleAll(all); return; }
+        const row = e.target.closest('.item-row');
+        if (!row) return;
+        const name = row.dataset.name;
+        if (e.target.closest('.check-circle')) app.toggleShoppingStatus(name);
+        else if (e.target.closest('.basket-remove')) app.setBasket(name, false);
+        else if (e.target.closest('.item-thumb')) app.openLightbox(name);
+        else if (e.target.closest('.item-main')) app.openEditSheet(name);
+    },
+    // Elegir / quitar de la canasta (intención explícita, segura al reintentar).
+    setBasket: (name, on) => app.change(items => items.map(i => {
+        if (i.name !== name || i.status === 'stocked') return i;
+        const out = { ...i, status: 'needed' };
+        if (on) out.basket = true; else delete out.basket;
+        return out;
+    })),
+
+    // --- LIBROS: solo en su sección (quiero comprarlo / lo tengo) ---
+    renderBooks: () => {
+        const container = document.getElementById('books-list-render');
+        const books = app.data.items.filter(app.isBook).sort((a, b) => a.name.localeCompare(b.name));
+        if (!books.length) {
+            container.innerHTML = '<div class="view-empty">Sin libros aún.<br><span class="view-empty-sub">Toca "Agregar" y escanea el código de barras del libro (ISBN).</span></div>';
+            return;
+        }
+        const row = (item) => {
+            const want = item.status !== 'stocked', name = app.esc(item.name), b = item.book || {};
+            const detail = `<div class="inv-cat">${app.esc([(b.authors || []).join(', '), b.year].filter(Boolean).join(' · ') || 'Libro')}</div>`;
+            return `
+            <div class="inv-item book-item ${want ? 'needed' : 'stocked'}" data-name="${name}">
+                ${app.rowMainHTML(item, 'inv-main', detail)}
+                <div class="inv-actions">
+                    <button type="button" class="inv-toggle ${want ? 'tengo' : 'pedir'}" aria-label="${want ? 'Ya lo tengo' : 'Lo quiero'}: ${name}">${want ? 'Lo tengo' : 'Lo quiero'}</button>
+                    <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
+                </div>
+            </div>`;
+        };
+        const want = books.filter(i => i.status !== 'stocked'), have = books.filter(i => i.status === 'stocked');
+        container.innerHTML =
+            (want.length ? `<div class="cat-header">${app.catIcon('Libros')}<span>Quiero comprarlo</span><span class="cat-count">· ${want.length}</span></div>${want.map(row).join('')}` : '') +
+            (have.length ? `<div class="cat-header once-saved">${app.catIcon('Libros')}<span>Lo tengo</span><span class="cat-count">· ${have.length}</span></div>${have.map(row).join('')}` : '');
+    },
+    onBooksClick: (e) => {
+        const el = e.target.closest('.inv-item');
+        if (!el) return;
+        const name = el.dataset.name, item = app.data.items.find(i => i.name === name);
+        if (!item) return;
+        if (e.target.closest('.inv-del')) app.deleteItem(name);
+        else if (e.target.closest('.inv-toggle')) app.setStatus(name, item.status === 'stocked' ? 'needed' : 'stocked');
+        else if (e.target.closest('.item-thumb')) app.openLightbox(name);
+        else if (e.target.closest('.inv-main')) app.openEditSheet(name);
     },
 
     // --- FILAS Y CATEGORÍAS (compartido por Lista, Inventario y Una vez) ---
@@ -333,11 +458,21 @@ const app = {
     onShoppingClick: (e) => {
         const all = e.target.closest('.collapse-all');
         if (all) { app.toggleAll(all); return; }
+        const saved = e.target.closest('.inv-item');   // compras de una vez guardadas
+        if (saved) {
+            const n = saved.dataset.name;
+            if (e.target.closest('.inv-del')) app.deleteItem(n);
+            else if (e.target.closest('.inv-toggle')) app.setStatus(n, 'needed');
+            else if (e.target.closest('.item-thumb')) app.openLightbox(n);
+            else if (e.target.closest('.inv-main')) app.openEditSheet(n);
+            return;
+        }
         const row = e.target.closest('.item-row');
         if (!row) return;
         const name = row.dataset.name;
-        if (e.target.closest('.check-circle')) app.toggleShoppingStatus(name);
-        else if (e.target.closest('.item-thumb.has-img')) app.openLightbox(name);
+        const item = app.data.items.find(i => i.name === name);
+        if (e.target.closest('.basket-btn')) { if (item) app.setBasket(name, !app.inBasket(item)); }
+        else if (e.target.closest('.item-thumb')) app.openLightbox(name);
         else if (e.target.closest('.level-bar')) app.openLevelSheet(name);
         else if (e.target.closest('.item-main')) app.openEditSheet(name);
     },
@@ -345,7 +480,7 @@ const app = {
     // --- INVENTARIO ---
     renderInventory: () => {
         const container = document.getElementById('inventory-list-render');
-        const regular = app.data.items.filter(i => !app.isOnce(i));
+        const regular = app.data.items.filter(i => !app.isOnce(i) && !app.isBook(i));
         if (regular.length === 0) {
             container.innerHTML = '<div class="view-empty">Sin artículos aún</div>';
             return;
@@ -387,48 +522,8 @@ const app = {
         const name = item.dataset.name;
         if (e.target.closest('.inv-del')) app.deleteItem(name);
         else if (e.target.closest('.inv-toggle')) app.toggleInventoryStatus(name);
-        else if (e.target.closest('.item-thumb.has-img')) app.openLightbox(name);
+        else if (e.target.closest('.item-thumb')) app.openLightbox(name);
         else if (e.target.closest('.level-bar')) app.openLevelSheet(name);
-        else if (e.target.closest('.inv-main')) app.openEditSheet(name);
-    },
-
-    // --- UNA VEZ (compras que no se reponen: escurridor, etc.) ---
-    // Aparecen en la lista normal mientras están por comprar; al comprarlas
-    // quedan guardadas aquí para volver a pedirlas algún día.
-    renderOnce: () => {
-        const container = document.getElementById('once-list-render');
-        const once = app.data.items.filter(app.isOnce).sort((a, b) => a.name.localeCompare(b.name));
-        if (!once.length) {
-            container.innerHTML = '<div class="view-empty">Sin compras de una vez.<br><span class="view-empty-sub">Al agregar o editar un artículo, elige la lista "Una vez".</span></div>';
-            return;
-        }
-        const row = (item) => {
-            const pending = item.status !== 'stocked';
-            const name = app.esc(item.name);
-            return `
-            <div class="inv-item ${pending ? 'needed' : 'stocked'}" data-name="${name}">
-                ${app.rowMainHTML(item, 'inv-main', `<div class="inv-cat">${app.esc(item.category)}${item.status === 'in_cart' ? ' · en el carrito' : ''}</div>`)}
-                <div class="inv-actions">
-                    <button type="button" class="inv-toggle ${pending ? 'tengo' : 'pedir'}" aria-label="${pending ? 'Ya lo tengo' : 'Pedir'}: ${name}">${pending ? 'Ya lo tengo' : '+ Pedir'}</button>
-                    <button type="button" class="inv-del" title="Eliminar" aria-label="Eliminar ${name}">${app.svgIcon('trash')}</button>
-                </div>
-            </div>`;
-        };
-        const pending = once.filter(i => i.status !== 'stocked'), saved = once.filter(i => i.status === 'stocked');
-        container.innerHTML =
-            (pending.length ? `<div class="cat-header">Por comprar<span class="cat-count">· ${pending.length}</span></div>${pending.map(row).join('')}` : '') +
-            (saved.length ? `<div class="cat-header once-saved">Guardadas<span class="cat-count">· ${saved.length}</span></div>${saved.map(row).join('')}` : '');
-    },
-
-    onOnceClick: (e) => {
-        const el = e.target.closest('.inv-item');
-        if (!el) return;
-        const name = el.dataset.name;
-        const item = app.data.items.find(i => i.name === name);
-        if (!item) return;
-        if (e.target.closest('.inv-del')) app.deleteItem(name);
-        else if (e.target.closest('.inv-toggle')) app.setStatus(name, item.status === 'stocked' ? 'needed' : 'stocked');
-        else if (e.target.closest('.item-thumb.has-img')) app.openLightbox(name);
         else if (e.target.closest('.inv-main')) app.openEditSheet(name);
     },
 
@@ -444,10 +539,18 @@ const app = {
 
     // --- NIVEL (cuánto queda en casa) ---
     // En Editar: interruptor "Medir" + slider; no aplica a compras de una vez.
+    // Campos según la lista: los libros no tienen categoría ni nivel (sí autor);
+    // "Una vez" no tiene nivel.
+    updateListFields: (p) => {
+        const list = app.segValue(`${p}-list`);
+        document.getElementById(`${p}-cat-field`).hidden = list === 'books';
+        document.getElementById(`${p}-author-field`).hidden = list !== 'books';
+        if (p === 'edit') app.updateLevelField();
+    },
     updateLevelField: () => {
-        const once = app.segValue('edit-list') === 'once';
+        const list = app.segValue('edit-list');
         const on = document.getElementById('edit-level-on').checked;
-        document.getElementById('edit-level-field').hidden = once;
+        document.getElementById('edit-level-field').hidden = list !== 'regular';
         document.getElementById('edit-level-control').hidden = !on;
     },
     showLevel: (lv) => {
@@ -477,16 +580,87 @@ const app = {
     // --- VISTA PREVIA DE LA IMAGEN ---
     openLightbox: (name) => {
         const item = app.data.items.find(i => i.name === name);
-        if (!item || !item.icon) return;
+        if (!item) return;
         const box = document.getElementById('lightbox');
         const img = document.getElementById('lightbox-img');
-        img.dataset.fallback = app.iconURL(item.icon);
-        img.src = app.iconURL(item.icon) + '&size=l';
-        img.alt = item.name;
+        const noimg = document.getElementById('lightbox-noimg');
+        if (item.icon) {
+            img.hidden = false; noimg.hidden = true;
+            img.dataset.fallback = app.iconURL(item.icon);
+            img.src = app.iconURL(item.icon) + '&size=l';
+            img.alt = item.name;
+        } else {
+            img.hidden = true; img.removeAttribute('src');
+            noimg.hidden = false;
+            noimg.innerHTML = app.catIcon(item.category);
+        }
         document.getElementById('lightbox-caption').textContent = item.name;
+        const b = item.book || {};
+        document.getElementById('lightbox-sub').textContent = app.isBook(item)
+            ? [(b.authors || []).join(', '), b.year].filter(Boolean).join(' · ')
+            : [item.category, item.price > 0 ? '$' + parseFloat(item.price).toFixed(2) : '', item.note].filter(Boolean).join(' · ');
+        const info = document.getElementById('lightbox-info');
+        info.innerHTML = (item.barcodes || []).length ? '<p class="lb-loading">Buscando información…</p>' : '';
         app.lightboxOpener = document.activeElement;
         box.hidden = false;
         box.querySelector('.lightbox-close').focus({ preventScroll: true });
+        const seq = app.lightboxSeq = (app.lightboxSeq || 0) + 1;
+        app.productDetailsHTML(item).then(html => {
+            if (seq === app.lightboxSeq && !box.hidden) info.innerHTML = html;
+        });
+    },
+
+    // Información del producto para la vista previa, según su primer código:
+    // libro (Open Library), comida (Open Food Facts) u otro (UPCitemdb vía servidor).
+    productDetailsHTML: async (item) => {
+        const codes = (item.barcodes || []).map(b => b.code);
+        if (!codes.length) return '';
+        const row = (k, v) => v ? `<div class="lb-row"><span class="lb-k">${k}</span><span class="lb-v">${app.esc(String(v))}</span></div>` : '';
+        const para = (t) => t ? `<p class="lb-desc">${app.esc(t)}</p>` : '';
+        const tags = (list) => list && list.length ? `<div class="lb-tags">${list.map(t => `<span>${app.esc(t)}</span>`).join('')}</div>` : '';
+        const code = codes[0];
+        if (app.isISBN(code)) {
+            const b = await app.lookupBook(code);
+            if (!b) return '<p class="lb-empty">Sin información de este libro en Open Library.</p>';
+            return row('Autor', (b.authors || []).join(', ')) + row('Año', b.year) + row('Páginas', b.pages) + row('Editorial', b.publisher)
+                + row('ISBN', code) + para(b.description) + tags(b.subjects) + '<p class="lb-src">Fuente: Open Library</p>';
+        }
+        const off = await app.foodDetails(code);
+        if (off) {
+            const p = off.product, n = p.nutriments || {};
+            const num = (v, u) => (v === undefined || v === null || v === '') ? '' : `${Math.round(v * 10) / 10} ${u}`;
+            const per = p.nutrition_data_per === 'serving' ? 'por porción' : 'por 100 g/ml';
+            const nutri = p.nutriscore_grade && /^[a-e]$/.test(p.nutriscore_grade) ? `<span class="nutri nutri-${p.nutriscore_grade}">Nutri-Score ${p.nutriscore_grade.toUpperCase()}</span>` : '';
+            const nova = p.nova_group ? `<span class="nova">NOVA ${p.nova_group}</span>` : '';
+            const nut = [['Energía', num(n['energy-kcal_100g'], 'kcal')], ['Proteína', num(n.proteins_100g, 'g')], ['Grasa', num(n.fat_100g, 'g')], ['Carbohidratos', num(n.carbohydrates_100g, 'g')], ['Azúcares', num(n.sugars_100g, 'g')], ['Sal', num(n.salt_100g, 'g')]].filter(x => x[1]);
+            const allergens = (p.allergens_tags || []).map(a => a.replace(/^\\w+:/, '').replace(/-/g, ' '));
+            return (nutri || nova ? `<div class="lb-badges">${nutri}${nova}</div>` : '')
+                + row('Marca', p.brands) + row('Cantidad', p.quantity)
+                + (nut.length ? `<div class="lb-nutri"><div class="lb-k">Nutrición ${per}</div>${nut.map(([k, v]) => `<div class="lb-nrow"><span>${k}</span><span>${v}</span></div>`).join('')}</div>` : '')
+                + (p.ingredients_text_es || p.ingredients_text_en || p.ingredients_text ? `<div class="lb-k">Ingredientes</div>${para(p.ingredients_text_es || p.ingredients_text_en || p.ingredients_text)}` : '')
+                + (allergens.length ? row('Alérgenos', allergens.join(', ')) : '')
+                + `<p class="lb-src">Fuente: Open ${off.db} Facts</p>`;
+        }
+        try {
+            const r = await fetch(`api.php?lookup=${code}`);
+            const j = r.ok ? await r.json() : {};
+            if (j.found) return row('Producto', j.name) + row('Marca', j.brand) + row('Tamaño', j.size) + para(j.description) + '<p class="lb-src">Fuente: UPCitemdb</p>';
+        } catch (e) { }
+        return '<p class="lb-empty">Sin información adicional de este producto.</p>';
+    },
+    foodCache: {},
+    foodDetails: async (code) => {
+        if (code in app.foodCache) return app.foodCache[code];
+        const fields = 'brands,quantity,nutriscore_grade,nova_group,nutriments,nutrition_data_per,ingredients_text_es,ingredients_text_en,ingredients_text,allergens_tags';
+        for (const [host, db] of [['world.openfoodfacts.org', 'Food'], ['world.openbeautyfacts.org', 'Beauty'], ['world.openproductsfacts.org', 'Products']]) {
+            try {
+                const r = await fetch(`https://${host}/api/v2/product/${code}.json?fields=${fields}`);
+                if (!r.ok) continue;
+                const j = await r.json();
+                if (j.status === 1 && j.product) return (app.foodCache[code] = { product: j.product, db });
+            } catch (e) { }
+        }
+        return (app.foodCache[code] = null);
     },
     closeLightbox: () => {
         const box = document.getElementById('lightbox');
@@ -498,12 +672,14 @@ const app = {
 
     // Cambia el estado de un artículo a un valor concreto (intención explícita).
     setStatus: (name, status) =>
-        app.change(items => items.map(i => i.name === name ? { ...i, status } : i)),
+        app.change(items => items.map(i => i.name === name ? app.withStatus(i, status) : i)),
 
     // ACCIÓN: en la Lista (Necesito <-> En Carrito)
     toggleShoppingStatus: (name) => {
         const item = app.data.items.find(i => i.name === name);
-        if (item) app.setStatus(name, item.status === 'in_cart' ? 'needed' : 'in_cart');
+        // En la canasta: marcar / desmarcar "en el carrito" (sigue en la canasta).
+        if (item) app.change(items => items.map(i => i.name !== name ? i
+            : (i.status === 'in_cart' ? { ...i, status: 'needed', basket: true } : { ...i, status: 'in_cart' })));
     },
 
     // ACCIÓN: en Inventario (Stocked <-> Needed)
@@ -511,8 +687,7 @@ const app = {
         const item = app.data.items.find(i => i.name === name);
         if (!item) return;
         const isActive = (item.status === 'needed' || item.status === 'in_cart');
-        if (isActive) app.change(items => items.map(i => i.name === name ? app.restocked({ ...i, status: 'stocked' }) : i));
-        else app.setStatus(name, 'needed');
+        app.setStatus(name, isActive ? 'stocked' : 'needed');
     },
 
     addItem: (e) => {
@@ -532,7 +707,15 @@ const app = {
             price: parseFloat(document.getElementById('new-price').value) || 0,
             status: 'needed'
         };
-        if (app.segValue('new-list') === 'once') newItem.list = 'once';
+        const list = app.segValue('new-list');
+        if (list !== 'regular') newItem.list = list;
+        if (list === 'books') {
+            newItem.category = 'Libros';
+            const authors = document.getElementById('new-author').value.split(',').map(a => a.trim()).filter(Boolean);
+            const book = { ...(app.addBook || {}) };
+            if (authors.length) book.authors = authors; else delete book.authors;
+            if (Object.keys(book).length) newItem.book = book;
+        }
         const barcodes = app.addBarcodes.map(({ code, label }) => ({ code, label }));
         if (barcodes.length) newItem.barcodes = barcodes;
         if (app.iconPickers.new.get()) newItem.icon = app.iconPickers.new.get();
@@ -545,7 +728,9 @@ const app = {
         app.iconPickers.new.set(null);
         app.change(items => exists(items) ? items : [...items.map(i => app.withoutCodes(i, codes)), newItem]);
         app.closeSheets();
-        app.showToast(newItem.list === 'once' ? 'Agregado (una vez)' : 'Agregado a la lista');
+        app.addBook = null;
+        document.getElementById('new-author').value = '';
+        app.showToast(newItem.list === 'books' ? 'Libro agregado' : newItem.list === 'once' ? 'Agregado (una vez)' : 'Agregado a Falta');
     },
 
     deleteItem: (name) => {
@@ -565,7 +750,9 @@ const app = {
         app.editBarcodes = (item.barcodes || []).map(b => ({ ...b }));
         app.renderBarcodes('edit');
         app.iconPickers.edit.set(item.icon);
-        app.setSeg('edit-list', app.isOnce(item) ? 'once' : 'regular');
+        app.setSeg('edit-list', item.list || 'regular');
+        document.getElementById('edit-author').value = ((item.book || {}).authors || []).join(', ');
+        app.updateListFields('edit');
         const measured = Number.isInteger(item.level);
         document.getElementById('edit-level-on').checked = measured;
         document.getElementById('edit-level').value = measured ? item.level : 100;
@@ -596,13 +783,25 @@ const app = {
         };
         const codes = new Set(fields.barcodes.map(b => b.code));
         const icon = app.iconPickers.edit.get();
-        const once = app.segValue('edit-list') === 'once';
-        const level = !once && document.getElementById('edit-level-on').checked ? +document.getElementById('edit-level').value : null;
+        const list = app.segValue('edit-list');
+        const level = list === 'regular' && document.getElementById('edit-level-on').checked ? +document.getElementById('edit-level').value : null;
+        const authors = document.getElementById('edit-author').value.split(',').map(a => a.trim()).filter(Boolean);
         const edited = (item) => {
             const out = { ...item, ...fields };
             if (icon) out.icon = icon; else delete out.icon;
-            if (once) out.list = 'once'; else delete out.list;
+            if (list !== 'regular') out.list = list; else delete out.list;
             if (level !== null) out.level = level; else delete out.level;
+            if (list === 'books') {
+                out.category = 'Libros';
+                delete out.basket;
+                if (out.status === 'in_cart') out.status = 'needed';
+                const book = { ...(item.book || {}) };
+                if (authors.length) book.authors = authors; else delete book.authors;
+                if (Object.keys(book).length) out.book = book; else delete out.book;
+            } else {
+                delete out.book;
+                if (out.category === 'Libros') out.category = 'Otros';
+            }
             return out;
         };
         app.change(items => clashes(items) ? items
@@ -880,6 +1079,17 @@ const app = {
     // y Open Products Facts. Devuelve { name, brand, quantity, label, category } o null.
     lookupProduct: async (code) => {
         if (code in app.productCache) return app.productCache[code];
+        // Libros: Open Library (no gasta consultas de UPCitemdb).
+        if (app.isISBN(code)) {
+            const b = await app.lookupBook(code);
+            if (!b) return null;
+            return (app.productCache[code] = {
+                name: b.title, brand: '', quantity: '',
+                label: [b.title, (b.authors || []).join(', ')].filter(Boolean).join(' · '),
+                image: (await app.imageExists(b.cover)) ? b.cover : '',
+                category: null,
+            });
+        }
         let failed = false;
         for (const host of app.PRODUCT_DBS) {
             try {
@@ -959,6 +1169,31 @@ const app = {
             </div>`).join('');
     },
 
+    // Libro: título, autor y portada de Open Library; lista "Libro".
+    scanBookForAdd: async (isbn) => {
+        const owner = app.data.items.find(i => (i.barcodes || []).some(b => b.code === isbn));
+        if (owner) { app.showToast(`Ese libro ya está como "${owner.name}"`); return; }
+        const entry = { code: isbn, label: '', loading: true };
+        app.addBarcodes.push(entry);
+        app.renderBarcodes('add');
+        app.setSeg('new-list', 'books');
+        app.updateListFields('new');
+        const b = await app.lookupBook(isbn);
+        entry.loading = false;
+        if (b) {
+            entry.label = [b.title, (b.authors || []).join(', ')].filter(Boolean).join(' · ');
+            const nameEl = document.getElementById('new-name');
+            if (!nameEl.value.trim() && b.title) nameEl.value = b.title;
+            if (b.authors && b.authors.length) document.getElementById('new-author').value = b.authors.join(', ');
+            app.addBook = { year: b.year || undefined, pages: b.pages || undefined, publisher: b.publisher || undefined };
+            Object.keys(app.addBook).forEach(k => app.addBook[k] === undefined && delete app.addBook[k]);
+            if (!app.iconPickers.new.get() && await app.imageExists(b.cover)) app.iconPickers.new.fromURL(b.cover);
+        } else {
+            app.showToast('Libro no encontrado: escribe el título');
+        }
+        app.renderBarcodes('add');
+    },
+
     // Editar un artículo → escanear un producto y asociarlo.
     scanForEdit: async () => {
         const code = await app.openScanner(document.querySelector('#edit-sheet .btn-scan'));
@@ -979,10 +1214,43 @@ const app = {
         app.useProductPhoto(app.iconPickers.edit, info);
     },
 
+    // ISBN-13 (978/979): el código de barras de un libro.
+    isISBN: (code) => /^97[89]\d{10}$/.test(code),
+
+    // Datos de un libro en Open Library (sin clave, permite CORS).
+    lookupBook: async (isbn) => {
+        if (isbn in app.bookCache) return app.bookCache[isbn];
+        const get = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(r.status); return r.json(); };
+        try {
+            const ed = await get(`https://openlibrary.org/isbn/${isbn}.json`);
+            const authors = [];
+            for (const a of (ed.authors || []).slice(0, 3)) { try { authors.push((await get(`https://openlibrary.org${a.key}.json`)).name); } catch (e) { } }
+            let work = {};
+            if (ed.works && ed.works[0]) { try { work = await get(`https://openlibrary.org${ed.works[0].key}.json`); } catch (e) { } }
+            const desc = typeof work.description === 'string' ? work.description : (work.description || {}).value || '';
+            const year = (String(ed.publish_date || '').match(/\d{4}/) || [])[0] || '';
+            return (app.bookCache[isbn] = {
+                title: [ed.title, ed.subtitle].filter(Boolean).join(': '),
+                authors: authors.filter(Boolean), year,
+                pages: ed.number_of_pages || null,
+                publisher: (ed.publishers || [])[0] || '',
+                description: desc.replace(/\s+/g, ' ').trim().slice(0, 1200),
+                subjects: (work.subjects || []).slice(0, 6),
+                cover: `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`,
+            });
+        } catch (e) {
+            return (app.bookCache[isbn] = null);
+        }
+    },
+    bookCache: {},
+    // ¿Existe la portada? (Open Library responde 404 si no la tiene)
+    imageExists: (url) => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(true); i.onerror = () => res(false); i.src = url; }),
+
     // Agregar un artículo → escanear el producto: rellena nombre y categoría.
     scanForAdd: async () => {
         const code = await app.openScanner(document.querySelector('#add-sheet .btn-scan'));
         if (!code) return;
+        if (app.isISBN(code)) return app.scanBookForAdd(code);
         const owner = app.data.items.find(i => (i.barcodes || []).some(b => b.code === code));
         if (owner) { app.showToast(`Ese producto ya está en la lista como "${owner.name}"`); return; }
         if (app.addBarcodes.some(b => b.code === code)) return;
@@ -1259,7 +1527,10 @@ const app = {
     },
     openAddSheet: () => {
         app.iconPickers.new.set(null);
-        app.setSeg('new-list', app.currentTab === 'once' ? 'once' : 'regular');
+        app.setSeg('new-list', app.currentTab === 'books' ? 'books' : (app.currentTab === 'shopping' && app.faltaFilter === 'once') ? 'once' : 'regular');
+        app.addBook = null;
+        document.getElementById('new-author').value = '';
+        app.updateListFields('new');
         app.addBarcodes = [];
         app.renderBarcodes('add');
         document.getElementById('new-name').value = '';
@@ -1311,7 +1582,7 @@ const app = {
         app.currentTab = tabName;
         document.querySelectorAll('.bn-item[data-view]').forEach(b =>
             b.classList.toggle('active', b.dataset.view === tabName));
-        ['shopping', 'inventory', 'once'].forEach(v =>
+        ['shopping', 'basket', 'inventory', 'books'].forEach(v =>
             document.getElementById(`view-${v}`).classList.toggle('hidden', tabName !== v));
         app.updateTotal();
     },

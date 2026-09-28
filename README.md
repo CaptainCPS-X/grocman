@@ -6,24 +6,38 @@ archivo JSON plano.
 
 ## Secciones
 
-- **Lista de compra:** los artículos por comprar, agrupados por categoría.
-  Tocar un artículo lo pasa al **carrito** (✓); "Finalizar compra" mueve el
-  carrito al inventario. Muestra el total y el subtotal del carrito.
-- **Lista e Inventario agrupados por categoría**, cada una plegable (o todas
-  con "Contraer / Expandir todo"); el estado se recuerda en el teléfono.
-- **Inventario:** los artículos que se reponen, con su categoría y precio.
-  Marca "Ya tengo" / "+ Pedir" para mover entre en casa (`stocked`) y por
-  comprar (`needed`). Alta, edición y borrado. Si se mide **cuánto queda**
-  (Editar → "Medir", de 10 en 10 %), se ve una barrita con borde animado
-  (verde / ámbar / rojo); tocarla abre un ajuste rápido. Al comprar el
-  artículo vuelve a 100 %.
-- **Una vez:** compras que no se reponen (un escurridor, etc.). Mientras están
-  por comprar aparecen también en la lista normal con la etiqueta "Una vez";
-  al finalizar la compra quedan guardadas aquí para volver a pedirlas. Un
-  artículo cambia de lista desde Editar → "Lista".
+Barra inferior: **Falta · Canasta · Inventario · Libros · Agregar**.
 
-Cada artículo tiene un estado: `needed` (por comprar) → `in_cart` (en el
-carrito) → `stocked` (en casa).
+- **Falta:** lo que se acabó o falta comprar (se vigila; no todo se compra).
+  Agrupado por categoría (plegables) y con filtro **Todo / Regular / Una vez**;
+  en "Una vez" también aparecen las compras de una vez ya guardadas ("+ Pedir").
+  Cada fila tiene **"+ Canasta"** para elegir lo que se compra esta vez.
+- **Canasta:** solo lo elegido para esta compra, con su total. En la tienda se
+  marca ✓ lo que va al carrito; **Finalizar** pasa lo marcado a "en casa" (nivel
+  a 100 %) y lo no encontrado se queda en la canasta. ✕ lo devuelve a Falta.
+- **Inventario:** los artículos que se reponen, por categoría. "Ya tengo" /
+  "+ Pedir" mueven entre en casa y Falta. Si se mide **cuánto queda** (Editar →
+  "Medir", de 10 en 10 %), se ve una barrita con borde animado; tocarla abre un
+  ajuste rápido.
+- **Libros:** solo en su sección, con "Quiero comprarlo" / "Lo tengo". Al
+  escanear un ISBN (978/979) se buscan título, autor, año, páginas, editorial y
+  portada en **Open Library**.
+- **Una vez** (lista de compras que no se reponen, p. ej. un escurridor): en
+  Falta con su etiqueta y en el filtro "Una vez". Un artículo cambia de lista
+  (Regular / Una vez / Libro) desde Editar → "Lista".
+
+Tocar la imagen de un artículo abre la **vista previa** con su información:
+libros (Open Library: autor, año, páginas, editorial, sinopsis, temas), comida
+(Open Food Facts: marca, cantidad, Nutri-Score, NOVA, nutrición por 100 g,
+ingredientes, alérgenos) y otros productos (UPCitemdb: marca, tamaño,
+descripción). La información se pide al abrir la vista previa; no se guarda en
+`items.json`.
+
+Cada artículo tiene un estado: `needed` (falta; con `basket: true` si está en
+la canasta) → `in_cart` (en el carrito) → `stocked` (en casa). Listas:
+`regular` (no se guarda el campo), `once` y `books` (con `book: {authors, year,
+pages, publisher}`). Categorías en `config.php` (`CATS`); los nombres antiguos
+se traducen solos (`LEGACY_CATS`).
 
 ### Productos y escáner de códigos de barras
 

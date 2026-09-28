@@ -122,23 +122,34 @@ if (!isAuthenticated()) {
             </form>
         </header>
 
+        <!-- Falta: lo que se acabó o falta comprar (se vigila; no todo se compra) -->
         <div id="view-shopping" class="view">
+            <div class="filter-chips" id="falta-filter" role="radiogroup" aria-label="Mostrar">
+                <button type="button" class="chip" role="radio" data-filter="all">Todo</button>
+                <button type="button" class="chip" role="radio" data-filter="regular">Regular</button>
+                <button type="button" class="chip" role="radio" data-filter="once">Una vez</button>
+            </div>
             <div id="shopping-list-render"></div>
+        </div>
+
+        <!-- Canasta: lo elegido para esta compra -->
+        <div id="view-basket" class="view hidden">
+            <div id="basket-list-render"></div>
         </div>
 
         <div id="view-inventory" class="view hidden">
             <div id="inventory-list-render"></div>
         </div>
 
-        <div id="view-once" class="view hidden">
-            <div id="once-list-render"></div>
+        <div id="view-books" class="view hidden">
+            <div id="books-list-render"></div>
         </div>
     </div>
 
-    <!-- Barra de total (solo en Lista) -->
+    <!-- Barra de total (solo en Canasta) -->
     <div id="total-bar" class="total-bar">
         <div class="total-info">
-            <span class="total-label">Total lista</span>
+            <span class="total-label">Total canasta</span>
             <span class="total-amount" id="total-amount">$0.00</span>
             <span class="cart-subtotal" id="cart-subtotal" style="display:none;">En carrito: $0.00</span>
         </div>
@@ -151,16 +162,20 @@ if (!isAuthenticated()) {
     <!-- Barra inferior flotante -->
     <nav class="bottom-nav">
         <button class="bn-item active" data-view="shopping" onclick="app.setTab('shopping')">
-            <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
-            <span class="bn-label">Lista</span>
+            <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg>
+            <span class="bn-label">Falta</span>
+        </button>
+        <button class="bn-item" data-view="basket" onclick="app.setTab('basket')">
+            <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 11-1 9"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4"/><path d="M4.5 15.5h15"/><path d="m5 11 4-7"/><path d="m9 11 1 9"/></svg>
+            <span class="bn-label">Canasta</span><span class="bn-badge" id="basket-count" hidden></span>
         </button>
         <button class="bn-item" data-view="inventory" onclick="app.setTab('inventory')">
             <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
             <span class="bn-label">Inventario</span>
         </button>
-        <button class="bn-item" data-view="once" onclick="app.setTab('once')">
-            <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>
-            <span class="bn-label">Una vez</span>
+        <button class="bn-item" data-view="books" onclick="app.setTab('books')">
+            <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+            <span class="bn-label">Libros</span>
         </button>
         <button class="bn-item" onclick="app.openAddSheet()">
             <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
@@ -198,15 +213,20 @@ if (!isAuthenticated()) {
                 <label for="new-name">Nombre</label>
                 <input type="text" id="new-name" placeholder="Ej. Leche" required>
             </div>
-            <div class="field">
+            <div class="field" id="new-author-field" hidden>
+                <label for="new-author">Autor <span class="opt">(opcional)</span></label>
+                <input type="text" id="new-author" placeholder="Ej. Gabriel García Márquez" autocomplete="off">
+            </div>
+            <div class="field" id="new-cat-field">
                 <label for="new-cat">Categoría</label>
-                <select id="new-cat"><?php echo catOptions(CATS); ?></select>
+                <select id="new-cat"><?php echo catOptions(array_values(array_diff(CATS, ['Libros']))); ?></select>
             </div>
             <div class="field">
                 <span class="field-label" id="new-list-label">Lista</span>
                 <div class="seg" id="new-list" role="radiogroup" aria-labelledby="new-list-label">
                     <button type="button" class="seg-opt" role="radio" data-list="regular">Regular <span class="seg-sub">se repone</span></button>
                     <button type="button" class="seg-opt" role="radio" data-list="once">Una vez</button>
+                    <button type="button" class="seg-opt" role="radio" data-list="books">Libro</button>
                 </div>
             </div>
             <div class="field">
@@ -231,15 +251,20 @@ if (!isAuthenticated()) {
                 <label for="edit-name">Nombre</label>
                 <input type="text" id="edit-name" required>
             </div>
-            <div class="field">
+            <div class="field" id="edit-author-field" hidden>
+                <label for="edit-author">Autor <span class="opt">(opcional)</span></label>
+                <input type="text" id="edit-author" placeholder="Ej. Gabriel García Márquez" autocomplete="off">
+            </div>
+            <div class="field" id="edit-cat-field">
                 <label for="edit-cat">Categoría</label>
-                <select id="edit-cat"><?php echo catOptions(CATS); ?></select>
+                <select id="edit-cat"><?php echo catOptions(array_values(array_diff(CATS, ['Libros']))); ?></select>
             </div>
             <div class="field">
                 <span class="field-label" id="edit-list-label">Lista</span>
                 <div class="seg" id="edit-list" role="radiogroup" aria-labelledby="edit-list-label">
                     <button type="button" class="seg-opt" role="radio" data-list="regular">Regular <span class="seg-sub">se repone</span></button>
                     <button type="button" class="seg-opt" role="radio" data-list="once">Una vez</button>
+                    <button type="button" class="seg-opt" role="radio" data-list="books">Libro</button>
                 </div>
             </div>
             <div class="field" id="edit-level-field">
@@ -304,8 +329,12 @@ if (!isAuthenticated()) {
     <!-- Vista previa de la imagen de un artículo -->
     <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-caption" hidden onclick="app.closeLightbox()">
         <button type="button" class="lightbox-close" aria-label="Cerrar vista previa"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-        <img id="lightbox-img" alt="">
-        <p id="lightbox-caption" class="lightbox-caption"></p>
+        <div class="lightbox-card" onclick="event.stopPropagation()">
+            <div class="lightbox-media"><img id="lightbox-img" alt=""><span class="lightbox-noimg" id="lightbox-noimg" hidden></span></div>
+            <h3 id="lightbox-caption" class="lightbox-caption"></h3>
+            <p class="lightbox-sub" id="lightbox-sub"></p>
+            <div class="lightbox-info" id="lightbox-info" aria-live="polite"></div>
+        </div>
     </div>
 
     <!-- Recortar imagen -->

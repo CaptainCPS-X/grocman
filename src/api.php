@@ -128,6 +128,12 @@ $productCacheFile = __DIR__ . '/data/products.json';
 const PRODUCT_NOT_FOUND_TTL = 2592000; // un "no encontrado" se vuelve a consultar a los 30 días
 const PRODUCT_IMAGE_MAX_BYTES = 3000000;
 
+// Recorta texto UTF-8 sin partir caracteres (mbstring puede no estar instalado).
+function cutText($s, $max) {
+    if (function_exists('mb_substr')) { return mb_substr($s, 0, $max); }
+    return preg_match('/^.{0,' . (int)$max . '}/us', $s, $m) ? $m[0] : '';
+}
+
 function upcLookupUrl() {
     return (getenv('GROCMAN_UPC_URL') ?: 'https://api.upcitemdb.com/prod/trial/lookup') . '?upc=';
 }
@@ -157,14 +163,15 @@ function withProductCache(callable $fn) {
 function categoryFromUpc($category, $title) {
     $t = strtolower($category . ' ' . $title);
     $rules = [
-        'Limpieza' => '/clean|household|laundry|dish|detergent|bleach|disinfect|trash bag|paper towel|sponge/',
-        'Higiene' => '/personal care|health & beauty|bath|body wash|shampoo|conditioner|deodorant|toothpaste|oral care|soap|lotion|razor|shav|toilet paper/',
+        'Limpieza y Hogar' => '/clean|household|laundry|dish|detergent|bleach|disinfect|trash bag|paper towel|sponge/',
+        'Cuidado Personal' => '/personal care|health & beauty|bath|body wash|shampoo|conditioner|deodorant|toothpaste|oral care|soap|lotion|razor|shav|toilet paper/',
         'Bebidas' => '/beverage|drink|juice|soda|water|coffee|tea/',
-        'Lácteos/Huevos' => '/dairy|milk|cheese|yogurt|egg/',
-        'Proteínas' => '/meat|poultry|chicken|beef|pork|fish|seafood/',
+        'Lácteos y Huevos' => '/dairy|milk|cheese|yogurt|egg/',
+        'Carnes y Mariscos' => '/meat|poultry|chicken|beef|pork|fish|seafood/',
         'Panadería' => '/bread|bakery|tortilla/',
-        'Frutas/Verduras' => '/fruit|vegetable|produce/',
+        'Frutas y Verduras' => '/fruit|vegetable|produce/',
     ];
+    if (preg_match('/vitamin|supplement|pain reliev|medicine|first aid|pharmacy|alcohol/', $t)) { return 'Salud y Farmacia'; }
     foreach ($rules as $cat => $re) { if (preg_match($re, $t)) { return $cat; } }
     return preg_match('/food|grocery|snack|pantry/', $t) ? 'Despensa' : 'Otros';
 }
@@ -202,7 +209,9 @@ function httpGet($url, $maxBytes) {
 function lookupProduct($code) {
     return withProductCache(function (&$cache) use ($code) {
         $hit = $cache[$code] ?? null;
-        if ($hit && ($hit['found'] || time() - $hit['t'] < PRODUCT_NOT_FOUND_TTL)) { return $hit; }
+        // Entradas encontradas de antes de guardar la descripción (v < 2): se
+        // vuelven a consultar una vez para tener la información de la vista previa.
+        if ($hit && (($hit['found'] && ($hit['v'] ?? 1) >= 2) || (!$hit['found'] && time() - $hit['t'] < PRODUCT_NOT_FOUND_TTL))) { return $hit; }
         if (!function_exists('curl_init')) { fail(503, 'La búsqueda de productos no está disponible.'); }
         $r = httpGet(upcLookupUrl() . $code, 500000);
         $json = json_decode($r['body'], true);
@@ -218,11 +227,14 @@ function lookupProduct($code) {
             }));
             $entry = [
                 't' => time(),
+                'v' => 2,
                 'found' => true,
                 'title' => trim(preg_replace('/\s+/', ' ', (string)$item['title'])),
                 'brand' => trim((string)($item['brand'] ?? '')),
                 'category' => categoryFromUpc((string)($item['category'] ?? ''), (string)$item['title']),
                 'images' => array_slice($images, 0, 3),
+                'description' => cutText(trim(preg_replace('/\s+/', ' ', (string)($item['description'] ?? ''))), 700),
+                'size' => trim((string)($item['size'] ?? '')),
             ];
         }
         $cache[$code] = $entry;
@@ -304,6 +316,10 @@ function getDB() {
         fail(500, 'No se pudo leer la lista. No se guardó nada.');
     }
     $db['version'] = (int)($db['version'] ?? 1);
+    foreach ($db['items'] as &$it) {
+        if (is_array($it)) { $it['category'] = (($it['list'] ?? '') === 'books') ? 'Libros' : categoryOf($it['category'] ?? null); }
+    }
+    unset($it);
     return $db;
 }
 
@@ -356,6 +372,24 @@ function normalizeBarcode($code) {
     return ((10 - $sum % 10) % 10) === (int)substr($code, -1) ? $code : null;
 }
 
+// Categoría válida (traduce los nombres antiguos; lo desconocido va a "Otros").
+function categoryOf($c) {
+    if (is_string($c) && isset(LEGACY_CATS[$c])) { return LEGACY_CATS[$c]; }
+    return in_array($c, CATS, true) ? $c : 'Otros';
+}
+
+// Datos de un libro (de Open Library): autores, año, páginas, editorial.
+function cleanBook($b) {
+    if (!is_array($b)) { return null; }
+    $out = [];
+    $authors = array_values(array_filter((array)($b['authors'] ?? []), function ($a) { return is_string($a) && trim($a) !== '' && strlen($a) <= 200; }));
+    if ($authors) { $out['authors'] = array_map('trim', array_slice($authors, 0, 5)); }
+    if (isset($b['year']) && preg_match('/^\d{3,4}$/', (string)$b['year'])) { $out['year'] = (string)$b['year']; }
+    if (isset($b['pages']) && filter_var($b['pages'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 20000]]) !== false) { $out['pages'] = (int)$b['pages']; }
+    if (isset($b['publisher']) && is_string($b['publisher']) && trim($b['publisher']) !== '' && strlen($b['publisher']) <= 300) { $out['publisher'] = trim($b['publisher']); }
+    return $out ?: null;
+}
+
 // Valida y normaliza los artículos que envía el cliente; null si son inválidos.
 function cleanItems($items) {
     if (!is_array($items) || array_values($items) !== $items) { return null; }
@@ -388,7 +422,7 @@ function cleanItems($items) {
         }
         $clean = [
             'name' => $name,
-            'category' => in_array($it['category'] ?? null, CATS, true) ? $it['category'] : 'Otros',
+            'category' => categoryOf($it['category'] ?? null),
             'status' => in_array($it['status'] ?? null, STATUSES, true) ? $it['status'] : 'needed',
             'note' => trim($note),
             'price' => round((float)$price, 2),
@@ -397,9 +431,18 @@ function cleanItems($items) {
         // Lista: 'regular' (se repone; no se guarda el campo) o 'once' (compra de una vez).
         $list = $it['list'] ?? 'regular';
         if (!in_array($list, LISTS, true)) { return null; }
-        if ($list === 'once') { $clean['list'] = 'once'; }
+        if ($list !== 'regular') { $clean['list'] = $list; }
+        if ($list === 'books') {
+            $clean['category'] = 'Libros';
+            $book = cleanBook($it['book'] ?? null);
+            if ($book) { $clean['book'] = $book; }
+        }
+        // Canasta: por comprar y elegido para esta compra. "En el carrito" ya
+        // implica estar en la canasta; lo que está en casa no puede estarlo.
+        // Los libros no usan canasta.
+        if (!empty($it['basket']) && $clean['status'] === 'needed' && $list !== 'books') { $clean['basket'] = true; }
         // Nivel en casa (0–100, de 10 en 10); ausente = sin seguimiento.
-        if (isset($it['level'])) {
+        if (isset($it['level']) && $list === 'regular') {
             $level = filter_var($it['level'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100]]);
             if ($level === false || $level % 10 !== 0) { return null; }
             $clean['level'] = $level;
@@ -421,7 +464,8 @@ if ($method === 'GET') {
         if (isset($_GET['productImage'])) { serveProductImage($code); }
         $p = lookupProduct($code);
         echo json_encode($p['found']
-            ? ['found' => true, 'name' => $p['title'], 'brand' => $p['brand'], 'category' => $p['category'], 'hasImage' => !empty($p['images'])]
+            ? ['found' => true, 'name' => $p['title'], 'brand' => $p['brand'], 'category' => $p['category'], 'hasImage' => !empty($p['images']),
+               'description' => $p['description'] ?? '', 'size' => $p['size'] ?? '']
             : ['found' => false]);
         exit();
     }

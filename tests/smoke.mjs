@@ -181,6 +181,20 @@ try {
     await post({ version: v(), items: [item({ name: 'Leche', icon: iconId })] });
     check('las huérfanas se borran en los dos tamaños', !fs.existsSync(path.join(ICONS, `${bothId}.png`)) && !fs.existsSync(path.join(ICONS, `${bothId}-l.jpg`)));
 
+    console.log('Categorías, libros y canasta');
+    await post({ version: v(), items: [item({ name: 'A', category: 'Proteínas' }), item({ name: 'B', category: 'Higiene' }), item({ name: 'C', category: 'Congelados' })] });
+    let cats = readData().items.map(i => i.category);
+    check('categorías antiguas se traducen (Proteínas → Carnes y Mariscos, Higiene → Cuidado Personal)', cats[0] === 'Carnes y Mariscos' && cats[1] === 'Cuidado Personal' && cats[2] === 'Congelados', JSON.stringify(cats));
+    const raw = JSON.parse(fs.readFileSync(DATA, 'utf8'));
+    raw.items[0].category = 'Lácteos/Huevos'; fs.writeFileSync(DATA, JSON.stringify(raw));
+    check('al leer, una categoría antigua guardada llega traducida', (await request('/api.php')).json?.items?.[0]?.category === 'Lácteos y Huevos');
+    await post({ version: v(), items: [item({ name: 'Mr. Fox', list: 'books', category: 'Despensa', status: 'needed', basket: true, level: 50, book: { authors: ['Roald Dahl', ''], year: 1988, pages: '96', publisher: 'Puffin', extra: 'x' } })] });
+    const bk = readData().items[0];
+    check('libro: categoría Libros, sin canasta ni nivel, datos limpios', bk.list === 'books' && bk.category === 'Libros' && !('basket' in bk) && !('level' in bk) && JSON.stringify(bk.book) === '{"authors":["Roald Dahl"],"year":"1988","pages":96,"publisher":"Puffin"}', JSON.stringify(bk));
+    await post({ version: v(), items: [item({ name: 'X', basket: true }), item({ name: 'Y', status: 'stocked', basket: true }), item({ name: 'Z', status: 'in_cart', basket: true })] });
+    const bs = readData().items.map(i => [i.name, i.status, !!i.basket]);
+    check('canasta solo en "por comprar"; en casa o en el carrito no guarda la marca', JSON.stringify(bs) === '[["X","needed",true],["Y","stocked",false],["Z","in_cart",false]]', JSON.stringify(bs));
+
     console.log('Listas y nivel');
     const r1 = await post({ version: v(), items: [item({ name: 'Escurridor', list: 'once' }), item({ name: 'Azúcar', level: 40 }), item({ name: 'Sal', list: 'regular' })] });
     const saved2 = readData().items;
@@ -191,10 +205,10 @@ try {
 
     console.log('Búsqueda de productos (UPCitemdb falso)');
     const dawn = await request('/api.php?lookup=037000222057');
-    check('producto encontrado: nombre limpio, categoría Limpieza, con foto', dawn.status === 200 && dawn.json?.found && dawn.json.name === 'Dawn Liquid Dish Soap Original Scent' && dawn.json.category === 'Limpieza' && dawn.json.hasImage === true, dawn.text);
+    check('producto encontrado: nombre limpio, categoría Limpieza y Hogar, con foto', dawn.status === 200 && dawn.json?.found && dawn.json.name === 'Dawn Liquid Dish Soap Original Scent' && dawn.json.category === 'Limpieza y Hogar' && dawn.json.hasImage === true, dawn.text);
     await request('/api.php?lookup=0037000222057');
     check('segunda consulta sale de la caché (UPCitemdb se consultó 1 vez)', upcCalls['0037000222057'] === 1, JSON.stringify(upcCalls));
-    check('Dove → Higiene', (await request('/api.php?lookup=011111396487')).json?.category === 'Higiene');
+    check('Dove → Cuidado Personal', (await request('/api.php?lookup=011111396487')).json?.category === 'Cuidado Personal');
     const photo = await fetch(`${BASE}/api.php?productImage=0037000222057`, { headers: { Cookie: cookieHeader() } });
     check('foto del producto por el servidor (sigue la redirección) → image/png', photo.status === 200 && photo.headers.get('content-type') === 'image/png');
     check('producto sin foto → 404', (await request('/api.php?productImage=011111396487')).status === 404);
