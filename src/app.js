@@ -14,6 +14,7 @@ const app = {
         flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
         barcode: '<path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+        pencil: '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>',
         trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>'
     },
     CAT_ICONS: {
@@ -369,7 +370,7 @@ const app = {
         if (e.target.closest('.check-circle')) app.toggleShoppingStatus(name);
         else if (e.target.closest('.basket-remove')) app.setBasket(name, false);
         else if (e.target.closest('.item-thumb')) app.openLightbox(name);
-        else if (e.target.closest('.item-main')) app.openEditSheet(name);
+        else if (e.target.closest('.item-main')) app.openLightbox(name);
     },
     // Elegir / quitar de la canasta (intención explícita, segura al reintentar).
     setBasket: (name, on) => app.change(items => items.map(i => {
@@ -479,7 +480,7 @@ const app = {
         else if (e.target.closest('.inv-toggle')) app.setStatus(name, item.status === 'stocked' ? 'needed' : 'stocked');
         else if (e.target.closest('.item-thumb')) app.openLightbox(name);
         else if (e.target.closest('.level-bar')) app.openLevelSheet(name);
-        else if (e.target.closest('.inv-main')) app.openEditSheet(name);
+        else if (e.target.closest('.inv-main')) app.openLightbox(name);
     },
 
     // --- CREAR / EDITAR / BORRAR LISTAS ---
@@ -616,7 +617,7 @@ const app = {
     rowMainHTML: (item, cls, detail, badge = '') => {
         const name = app.esc(item.name);
         const price = item.price > 0 ? `<span class="row-price">$${parseFloat(item.price).toFixed(2)}</span>` : '';
-        return `<div class="row-main ${cls}" role="button" tabindex="0" aria-label="Editar ${name}">
+        return `<div class="row-main ${cls}" role="button" tabindex="0" aria-label="Ver ${name}">
                         <div class="row-name"><span class="row-name-text">${name}</span>${badge}</div>
                         ${app.thumbHTML(item)}
                         <div class="row-detail">${detail}</div>
@@ -684,7 +685,7 @@ const app = {
             if (e.target.closest('.inv-del')) app.deleteItem(n);
             else if (e.target.closest('.inv-toggle')) app.setStatus(n, 'needed');
             else if (e.target.closest('.item-thumb')) app.openLightbox(n);
-            else if (e.target.closest('.inv-main')) app.openEditSheet(n);
+            else if (e.target.closest('.inv-main')) app.openLightbox(n);
             return;
         }
         const row = e.target.closest('.item-row');
@@ -694,7 +695,7 @@ const app = {
         if (e.target.closest('.basket-btn')) { if (item) app.setBasket(name, !app.inBasket(item)); }
         else if (e.target.closest('.item-thumb')) app.openLightbox(name);
         else if (e.target.closest('.level-bar')) app.openLevelSheet(name);
-        else if (e.target.closest('.item-main')) app.openEditSheet(name);
+        else if (e.target.closest('.item-main')) app.openLightbox(name);
     },
 
     // --- INVENTARIO ---
@@ -744,7 +745,7 @@ const app = {
         else if (e.target.closest('.inv-toggle')) app.toggleInventoryStatus(name);
         else if (e.target.closest('.item-thumb')) app.openLightbox(name);
         else if (e.target.closest('.level-bar')) app.openLevelSheet(name);
-        else if (e.target.closest('.inv-main')) app.openEditSheet(name);
+        else if (e.target.closest('.inv-main')) app.openLightbox(name);
     },
 
     // --- SELECTOR DE LISTA (Regular / Una vez) ---
@@ -819,6 +820,7 @@ const app = {
             noimg.hidden = false;
             noimg.innerHTML = app.catIcon(item.category);
         }
+        app.lightboxName = item.name;
         document.getElementById('lightbox-caption').textContent = item.name;
         const b = item.book || {};
         document.getElementById('lightbox-sub').textContent = app.isBook(item)
@@ -886,6 +888,12 @@ const app = {
             } catch (e) { }
         }
         return (app.foodCache[code] = null);
+    },
+    // Botón ✎ de la vista previa: cierra y abre Editar.
+    editFromLightbox: () => {
+        const name = app.lightboxName;
+        app.closeLightbox();
+        if (name) app.openEditSheet(name);
     },
     closeLightbox: () => {
         const box = document.getElementById('lightbox');
@@ -1784,7 +1792,8 @@ const app = {
             return;
         }
         if (!document.getElementById('lightbox').hidden) {
-            if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); if (e.key === 'Escape') app.closeLightbox(); }
+            if (e.key === 'Escape') { e.preventDefault(); app.closeLightbox(); }
+            else if (e.key === 'Tab') app.trapTab(document.getElementById('lightbox'), e);
             return;
         }
         if (app.scan) {

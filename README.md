@@ -37,7 +37,8 @@ Barra inferior: **Falta · Canasta · Inventario · Listas · Agregar**.
   se pide una confirmación más. El servidor guarda una copia
   (`data/backups/items-antes-borrar-lista-*.json`) antes de borrar una lista.
   Un artículo cambia de lista desde Editar → "Lista".
-Tocar la imagen de un artículo abre la **vista previa** con su información:
+Tocar un artículo abre su **vista previa** (el botón ✎ lleva a Editar) con su
+información:
 libros (Open Library: autor, año, páginas, editorial, sinopsis, temas), comida
 (Open Food Facts: marca, cantidad, Nutri-Score, NOVA, nutrición por 100 g,
 ingredientes, alérgenos) y otros productos (UPCitemdb: marca, tamaño,

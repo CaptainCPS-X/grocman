@@ -736,6 +736,19 @@ body {
 .lightbox-noimg[hidden] { display: none; }
 .lightbox-noimg .lucide { width: 48px; height: 48px; }
 .lightbox-card .lightbox-caption { margin: 12px 0 2px; color: #212529; font-size: 19px; text-align: left; }
+/* Título de la vista previa con el botón Editar */
+.lightbox-head { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 2px; }
+.lightbox-head .lightbox-caption { flex: 1; min-width: 0; margin: 0; padding-top: 5px; overflow-wrap: anywhere; }
+.lightbox-edit {
+    flex: none; width: 40px; height: 40px; border-radius: 12px; border: none; padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(0, 123, 255, 0.09); color: var(--primary);
+    transition: background 0.15s, transform 0.1s;
+}
+.lightbox-edit:hover { background: rgba(0, 123, 255, 0.16); }
+.lightbox-edit:active { transform: scale(0.94); }
+.lightbox-edit:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.lightbox-edit .lucide { width: 19px; height: 19px; }
 .lightbox-sub { margin: 0 0 10px; font-size: 13.5px; color: #6c757d; }
 .lightbox-sub:empty { display: none; }
 .lightbox-info:empty { display: none; }
