@@ -81,8 +81,10 @@ const upcServer = http.createServer((req, res) => {
     }
     if (url.pathname === '/gbooks/content') {
         const id = url.searchParams.get('id'), zoom = url.searchParams.get('zoom');
-        if (id === 'GbMan3at3r' && zoom === '3') { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(pngOf(30, 30)); } // aviso "sin imagen"
-        if (id === 'GbMan3at3r') { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(pngOf(128, 192)); }
+        const png = (w, h) => { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(pngOf(w, h)); };
+        // Aviso "image not available" de Google: otra proporción que la portada.
+        if (id === 'GbMan3at3r') return zoom === '3' ? png(575, 750) : zoom === '2' ? png(300, 450) : png(128, 192);
+        if (id === 'SoloMiniat') return zoom === '1' ? png(128, 190) : zoom === '2' ? png(300, 48) : png(575, 750);
         res.writeHead(404); return res.end();
     }
     if (url.pathname === '/redir') { res.writeHead(302, { Location: `${UPC}/img.png` }); return res.end(); }
@@ -298,7 +300,12 @@ try {
     check('Google sin cuota → available:false (la app usa Open Library)', (await request('/api.php?books=cuota')).json?.available === false);
     check('búsqueda vacía → 400', (await request('/api.php?books=')).status === 400);
     const cov = await fetch(`${BASE}/api.php?bookCover=GbMan3at3r&size=l`, { headers: { Cookie: cookieHeader() } });
-    check('portada grande: salta el aviso "sin imagen" y sirve la real', cov.status === 200 && /image\/png/.test(cov.headers.get('content-type') || ''));
+    const pngWidth = async (r) => Buffer.from(await r.arrayBuffer()).readUInt32BE(16);
+    check('portada grande: salta el aviso (otra proporción) y sirve zoom 2', cov.status === 200 && await pngWidth(cov) === 300);
+    const only = await fetch(`${BASE}/api.php?bookCover=SoloMiniat&size=l`, { headers: { Cookie: cookieHeader() } });
+    check('portada grande: si solo hay avisos, sirve la miniatura real', only.status === 200 && await pngWidth(only) === 128);
+    const small = await fetch(`${BASE}/api.php?bookCover=GbMan3at3r`, { headers: { Cookie: cookieHeader() } });
+    check('miniatura: zoom 1', small.status === 200 && await pngWidth(small) === 128);
     check('portada: id inválido → 400, sin portada → 404', (await request('/api.php?bookCover=..%2Fx')).status === 400 && (await request('/api.php?bookCover=SinPortada1')).status === 404);
     check('portada sin sesión → 401', (await fetch(`${BASE}/api.php?bookCover=GbMan3at3r`)).status === 401);
     fs.renameSync(GOOGLE_PHP, GOOGLE_PHP + '.off');

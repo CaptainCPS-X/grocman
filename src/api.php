@@ -366,26 +366,40 @@ function gbooksIdValid($id) { return is_string($id) && preg_match('/^[A-Za-z0-9_
 
 // Portada de un volumen de Google Books, a través del servidor (sin CORS no se
 // podría guardar como imagen). Solo books.google.com con un id válido.
-// $size: 's' miniatura (para la lista de resultados) o 'l' la más grande posible.
+// $size: 's' miniatura (zoom 1, la que se ve en los resultados) o 'l' la más
+// grande posible. En zoom 2/3 Google a veces responde con un aviso "image not
+// available" (PNG de otra proporción) o una franja: solo se acepta si tiene la
+// misma proporción que la miniatura, que siempre es la portada real.
+const GBOOKS_PLACEHOLDERS = ['c96309220b9cbd205c36d879d09a3647', 'a64fa89d7ebc97075c1d363fc5fea71f'];
+function gbooksCover($id, $zoom) {
+    $url = gbooksCoverUrl() . '?' . http_build_query(['id' => $id, 'printsec' => 'frontcover', 'img' => 1, 'zoom' => $zoom]);
+    $r = httpGet($url, PRODUCT_IMAGE_MAX_BYTES);
+    $info = $r['ok'] && $r['status'] === 200 ? @getimagesizefromstring($r['body']) : false;
+    if (!$info || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP, IMAGETYPE_GIF], true) || $info[0] < 40 || $info[1] < 40) { return null; }
+    if (in_array(md5($r['body']), GBOOKS_PLACEHOLDERS, true)) { return null; }
+    return ['body' => $r['body'], 'mime' => $info['mime'], 'w' => $info[0], 'h' => $info[1]];
+}
 function serveGoogleCover($id, $size) {
     if (!gbooksIdValid($id)) { fail(400, 'Id de libro inválido.'); }
     if (!function_exists('curl_init')) { fail(503, 'No disponible.'); }
-    foreach ($size === 'l' ? [3, 2, 1] : [1] as $zoom) {
-        $url = gbooksCoverUrl() . '?' . http_build_query(['id' => $id, 'printsec' => 'frontcover', 'img' => 1, 'zoom' => $zoom]);
-        $r = httpGet($url, PRODUCT_IMAGE_MAX_BYTES);
-        $info = $r['ok'] && $r['status'] === 200 ? @getimagesizefromstring($r['body']) : false;
-        // Google devuelve un aviso "sin imagen" pequeño cuando no tiene ese tamaño.
-        if (!$info || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP, IMAGETYPE_GIF], true) || $info[0] < 40) { continue; }
-        session_write_close();
-        header('Content-Type: ' . $info['mime']);
-        header('Content-Length: ' . strlen($r['body']));
-        header('X-Content-Type-Options: nosniff');
-        header("Content-Security-Policy: default-src 'none'; sandbox");
-        header('Cache-Control: private, max-age=604800');
-        echo $r['body'];
-        exit();
+    $thumb = gbooksCover($id, 1);
+    if (!$thumb) { fail(404, 'Sin portada.'); }
+    $best = $thumb;
+    if ($size === 'l') {
+        $ratio = $thumb['h'] / $thumb['w'];
+        foreach ([3, 2] as $zoom) {
+            $c = gbooksCover($id, $zoom);
+            if ($c && $c['w'] > $thumb['w'] && abs($c['h'] / $c['w'] - $ratio) / $ratio < 0.06) { $best = $c; break; }
+        }
     }
-    fail(404, 'Sin portada.');
+    session_write_close();
+    header('Content-Type: ' . $best['mime']);
+    header('Content-Length: ' . strlen($best['body']));
+    header('X-Content-Type-Options: nosniff');
+    header("Content-Security-Policy: default-src 'none'; sandbox");
+    header('Cache-Control: private, max-age=604800');
+    echo $best['body'];
+    exit();
 }
 
 // Bloqueo exclusivo durante todo el ciclo leer → comprobar versión → escribir,
