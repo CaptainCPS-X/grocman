@@ -135,6 +135,8 @@ const app = {
             const entry = (which === 'add' ? app.addBarcodes : app.editBarcodes)[+e.target.dataset.i];
             if (entry) entry.label = e.target.value.trim();
         }));
+        app.restoreRoute();
+        app.initNav();
         await app.fetchData({ poll: false });
         // El poll se pausa con la pestaña en segundo plano y se pone al día al volver.
         setInterval(() => { if (!document.hidden) app.fetchData(); }, app.POLL_MS);
@@ -449,6 +451,7 @@ const app = {
         ? `<span class="${cls} has-img"><img src="${app.iconURL(item.icon)}&size=l" data-fallback="${app.iconURL(item.icon)}" alt="" loading="lazy" decoding="async"></span>`
         : `<span class="${cls} no-img" style="--lc:${(app.listOf(item) || {}).color || '#f59e0b'}" aria-hidden="true">${app.catIcon('Libros')}<span class="cv-title">${app.esc(item.name)}</span></span>`,
     renderLists: () => {
+        app.scheduleNavSync();
         const c = document.getElementById('lists-render');
         const open = app.openListId && app.listById(app.openListId);
         if (!open) {
@@ -1079,7 +1082,7 @@ const app = {
     editFromLightbox: () => {
         const name = app.lightboxName;
         app.closeLightbox();
-        if (name) app.openEditSheet(name);
+        if (name) { app.openEditSheet(name); app.sheetReturn = name; }
     },
     closeLightbox: () => {
         const box = document.getElementById('lightbox');
@@ -1109,9 +1112,9 @@ const app = {
         app.setStatus(name, isActive ? 'stocked' : 'needed');
     },
 
-    addItem: (e) => {
+    addItem: async (e) => {
         e.preventDefault();
-        if (app.pickerBusy(app.iconPickers.new)) return;
+        if (!await app.waitPicker(app.iconPickers.new, e.target)) return;
         const name = document.getElementById('new-name').value.trim();
         if (!name) return;
         const exists = (items) => items.some(i => i.name.toLowerCase() === name.toLowerCase());
@@ -1182,9 +1185,9 @@ const app = {
         app.openSheet('edit-sheet', { focusField: false });
     },
 
-    saveEdit: (e) => {
+    saveEdit: async (e) => {
         e.preventDefault();
-        if (app.pickerBusy(app.iconPickers.edit)) return;
+        if (!await app.waitPicker(app.iconPickers.edit, e.target)) return;
         const originalName = document.getElementById('edit-original-name').value;
         const newName = document.getElementById('edit-name').value.trim();
         if (!newName) return;
@@ -2029,7 +2032,9 @@ const app = {
         const url = isFile ? URL.createObjectURL(src) : src;
         const img = new Image();
         if (!isFile && /^https?:/.test(url)) img.crossOrigin = 'anonymous';
+        const tooSlow = setTimeout(() => { img.onload = img.onerror = null; img.src = ''; reject(new Error('La imagen tardó demasiado; intenta otra vez.')); }, 30000);
         img.onload = () => {
+            clearTimeout(tooSlow);
             if (isFile) URL.revokeObjectURL(url);
             const iw = img.naturalWidth, ih = img.naturalHeight;
             try {
@@ -2057,7 +2062,7 @@ const app = {
                 resolve({ thumb: t.toDataURL('image/png'), large });
             } catch (e) { reject(new Error('No se pudo usar esa imagen.')); }
         };
-        img.onerror = () => { if (isFile) URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
+        img.onerror = () => { clearTimeout(tooSlow); if (isFile) URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
         img.src = url;
     }),
 
@@ -2071,7 +2076,8 @@ const app = {
         const removeBtn = root.querySelector('.ip-remove');
         const status = root.querySelector('.ip-status');
         // source: la imagen original (archivo o URL) para poder recortarla de nuevo.
-        let value = null, busy = false, seq = 0, source = null;
+        let value = null, busy = false, seq = 0, source = null, idle = [];
+        const settle = () => { const w = idle; idle = []; w.forEach(f => f()); };
         const render = () => {
             preview.innerHTML = value ? `<img src="${app.iconURL(value)}" alt="">` : app.svgIcon('image');
             preview.classList.toggle('has-img', !!value);
@@ -2086,15 +2092,17 @@ const app = {
         const load = async (src, failMsg, crop = null) => {
             const my = ++seq;
             busy = true; status.textContent = ''; render();
+            const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
             try {
                 const imgs = await app.toIconImages(src, crop);
-                const res = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iconUpload: imgs.thumb, iconLarge: imgs.large }) });
+                const res = await fetch('api.php', { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iconUpload: imgs.thumb, iconLarge: imgs.large }) });
                 if (res.status === 401) { location.reload(); return; }
                 const json = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(json.error || failMsg);
                 if (my === seq) { value = json.icon; source = src; }
-            } catch (e) { if (my === seq) status.textContent = e.message || failMsg; }
-            if (my === seq) { busy = false; render(); }
+            } catch (e) { if (my === seq) status.textContent = e.name === 'AbortError' ? 'La imagen tardó demasiado; intenta otra vez.' : (e.message || failMsg); }
+            clearTimeout(timer);
+            if (my === seq) { busy = false; render(); settle(); }
         };
         inputs.forEach(input => input.addEventListener('change', () => {
             const file = input.files[0];
@@ -2109,12 +2117,13 @@ const app = {
             const crop = await app.openCropper(src, cropBtn);
             if (crop) load(src, 'No se pudo recortar la imagen.', crop);
         });
-        removeBtn.addEventListener('click', () => { if (busy) return; seq++; value = null; source = null; status.textContent = ''; render(); });
+        removeBtn.addEventListener('click', () => { if (busy) return; seq++; value = null; source = null; status.textContent = ''; render(); settle(); });
         render();
         return {
             get: () => value,
             busy: () => busy,
-            set: (v) => { seq++; busy = false; value = v || null; source = null; status.textContent = ''; render(); },
+            whenIdle: () => busy ? new Promise(r => idle.push(r)) : Promise.resolve(),
+            set: (v) => { seq++; busy = false; value = v || null; source = null; status.textContent = ''; render(); settle(); },
             fromURL: (url) => load(url, 'No se pudo usar la foto del producto.'),
         };
     },
@@ -2231,10 +2240,18 @@ const app = {
         if (c.opener && document.contains(c.opener)) c.opener.focus({ preventScroll: true });
         c.resolve(result);
     },
-    pickerBusy: (picker) => {
-        if (!picker.busy()) return false;
-        app.showToast('Espera a que termine de subir la imagen');
-        return true;
+    // Guardar con la imagen aún cargando: el botón avisa y se guarda solo al
+    // terminar (antes el toque se ignoraba y la hoja quedaba abierta).
+    // Devuelve false si la hoja se cerró mientras tanto.
+    waitPicker: async (picker, form) => {
+        if (!picker.busy()) return true;
+        const btn = form.querySelector('button[type=submit]');
+        if (btn.disabled) return false; // ya está esperando
+        const label = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Esperando la imagen…';
+        await picker.whenIdle();
+        btn.disabled = false; btn.textContent = label;
+        return !!form.closest('.sheet.open');
     },
     // Al escanear: si el artículo aún no tiene imagen, usar la foto del producto.
     useProductPhoto: (picker, info) => {
@@ -2290,6 +2307,7 @@ const app = {
         document.querySelectorAll('.sheet').forEach(s => s.classList.remove('open'));
         if (wasOpen && app.sheetOpener && document.contains(app.sheetOpener)) app.sheetOpener.focus({ preventScroll: true });
         app.sheetOpener = null;
+        app.sheetReturn = null;
     },
     onSheetKeydown: (e) => {
         if (!document.getElementById('cropper').hidden) {
@@ -2327,13 +2345,104 @@ const app = {
     },
 
     // --- NAVEGACIÓN ---
-    setTab: (tabName) => {
+    setTab: (tabName, { back = false } = {}) => {
+        // Historial de secciones para el botón Atrás (máx. 10).
+        if (!back && tabName !== app.currentTab) {
+            app.navStack.push(app.currentTab);
+            if (app.navStack.length > 10) app.navStack.shift();
+        }
         app.currentTab = tabName;
         document.querySelectorAll('.bn-item[data-view]').forEach(b =>
             b.classList.toggle('active', b.dataset.view === tabName));
         ['shopping', 'basket', 'inventory', 'lists'].forEach(v =>
             document.getElementById(`view-${v}`).classList.toggle('hidden', tabName !== v));
         app.updateTotal();
+        app.scheduleNavSync();
+    },
+
+    // --- NAVEGACIÓN TIPO APP (botón / gesto Atrás del teléfono) ---
+    // Cada nivel al que se puede volver (capa abierta: hoja, vista previa, visor,
+    // escáner, recorte; detalle de una lista; secciones anteriores) tiene su
+    // entrada en el historial del navegador ({ g: profundidad }). Atrás quita un
+    // nivel (como el círculo en un menú de consola) en vez de salir de la app.
+    // Si un nivel se cierra desde la app (✕, Guardar…), su entrada se consume.
+    // La sección y la lista abiertas van en el #hash: al recargar se vuelve ahí.
+    navStack: [],
+    navPushed: 0,      // entradas propias sobre la base
+    navGoing: false,   // hay un history.go() en curso (su popstate se ignora)
+    ROUTES: { shopping: 'falta', basket: 'canasta', inventory: 'inventario', lists: 'listas' },
+    route: () => app.ROUTES[app.currentTab] + (app.currentTab === 'lists' && app.openListId ? '/' + encodeURIComponent(app.openListId) : ''),
+    restoreRoute: () => {
+        const [r, id] = decodeURIComponent(location.hash.slice(1)).split('/');
+        const tab = Object.keys(app.ROUTES).find(k => app.ROUTES[k] === r);
+        if (tab) app.setTab(tab, { back: true });
+        if (tab === 'lists' && id) app.openListId = id;
+    },
+    overlayOpen: () => ['cropper', 'cover-viewer', 'lightbox'].filter(id => !document.getElementById(id).hidden).length
+        + (app.scan ? 1 : 0) + (document.querySelector('.sheet.open') ? 1 : 0),
+    // Niveles a los que Atrás puede volver desde el estado actual.
+    navLevels: () => {
+        const tabs = app.navStack.length + ((app.navStack[0] || app.currentTab) !== 'shopping' ? 1 : 0);
+        return app.overlayOpen() + (app.currentTab === 'lists' && app.openListId ? 1 : 0) + tabs;
+    },
+    initNav: () => {
+        app.navPushed = (history.state && history.state.g) || 0;
+        window.addEventListener('popstate', app.onPopState);
+        // Las capas se observan directamente: cualquier apertura o cierre ajusta el historial.
+        const mo = new MutationObserver(app.scheduleNavSync);
+        ['cropper', 'cover-viewer', 'lightbox', 'scanner'].forEach(id => mo.observe(document.getElementById(id), { attributes: true, attributeFilter: ['hidden'] }));
+        document.querySelectorAll('.sheet').forEach(el => mo.observe(el, { attributes: true, attributeFilter: ['class'] }));
+        app.scheduleNavSync();
+    },
+    scheduleNavSync: () => {
+        if (app.navSyncQueued) return;
+        app.navSyncQueued = true;
+        setTimeout(() => { app.navSyncQueued = false; app.navSync(); }, 0);
+    },
+    navSync: () => {
+        if (app.navGoing) return; // se repite al llegar su popstate
+        const want = app.navLevels();
+        history.replaceState({ g: app.navPushed }, '', '#' + app.route());
+        if (want > app.navPushed) {
+            // Sin interacción del usuario, Chrome salta estas entradas al ir Atrás:
+            // se esperan al primer toque.
+            if (navigator.userActivation && !navigator.userActivation.hasBeenActive) {
+                if (!app.navWaitTouch) { app.navWaitTouch = true; document.addEventListener('pointerdown', () => { app.navWaitTouch = false; app.scheduleNavSync(); }, { once: true, capture: true }); }
+                return;
+            }
+            while (app.navPushed < want) history.pushState({ g: ++app.navPushed }, '', '#' + app.route());
+        } else if (want < app.navPushed) {
+            // Se cerró algo desde la app: consumir sus entradas.
+            app.navGoing = true;
+            history.go(want - app.navPushed);
+        }
+    },
+    onPopState: (e) => {
+        const depth = (e.state && e.state.g) || 0;
+        if (app.navGoing) { app.navGoing = false; app.navPushed = depth; app.scheduleNavSync(); return; }
+        const steps = app.navPushed - depth;
+        app.navPushed = depth;
+        for (let i = 0; i < steps; i++) app.goBack();
+        app.scheduleNavSync();
+    },
+    // Un paso atrás: la capa de arriba, luego el detalle de la lista, luego la sección anterior.
+    goBack: () => {
+        if (!document.getElementById('cropper').hidden) return app.closeCropper(null);
+        if (app.scan) return app.closeScanner(null);
+        if (!document.getElementById('cover-viewer').hidden) return app.closeCoverViewer();
+        if (!document.getElementById('lightbox').hidden) return app.closeLightbox();
+        const sheet = document.querySelector('.sheet.open');
+        if (sheet) {
+            if (sheet.id === 'book-search-sheet') return app.closeBookSearch();
+            const ret = app.sheetReturn; // Editar abierto desde la vista previa: se vuelve a ella
+            app.closeSheets();
+            if (ret) app.openLightbox(ret);
+            return;
+        }
+        if (app.currentTab === 'lists' && app.openListId) { app.openListId = null; app.renderLists(); window.scrollTo(0, 0); return; }
+        const prev = app.navStack.pop();
+        if (prev) app.setTab(prev, { back: true });
+        else if (app.currentTab !== 'shopping') app.setTab('shopping', { back: true });
     },
 
     showToast: (msg) => {

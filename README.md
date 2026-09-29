@@ -8,6 +8,12 @@ archivo JSON plano.
 
 Barra inferior: **Falta · Canasta · Inventario · Listas · Agregar**.
 
+**Navegación tipo app:** el botón / gesto **Atrás** del teléfono retrocede un
+nivel dentro de la app (visor → vista previa → hoja → detalle de la lista →
+sección anterior) en vez de salir; en Falta sin nada abierto, sale. Editar
+abierto desde la vista previa vuelve a ella. La sección y la lista abiertas van
+en la URL (`#listas/books`): al recargar se vuelve al mismo lugar.
+
 - **Falta:** lo que se acabó o falta comprar (se vigila; no todo se compra).
   Agrupado por categoría (plegables) y con un filtro por lista (**Todo**, Hogar,
   Una vez y las listas que se creen); en una lista de compra única también
