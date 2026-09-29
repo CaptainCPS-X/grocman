@@ -31,6 +31,8 @@ const hash = execFileSync('php', ['-r', `echo password_hash('${PASSWORD}', PASSW
 fs.writeFileSync(path.join(WEB, 'auth.php'), `<?php $stored_hash = '${hash}';`);
 const GOOGLE_PHP = path.join(WEB, 'google.php');
 fs.writeFileSync(GOOGLE_PHP, "<?php const GOOGLE_BOOKS_KEY = 'clave-de-prueba';");
+const BESTBUY_PHP = path.join(WEB, 'bestbuy.php');
+fs.writeFileSync(BESTBUY_PHP, "<?php const BESTBUY_KEY = 'bb-prueba';");
 
 // --- UPCitemdb falso (la API real no se consulta en las pruebas) ---
 const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -39,6 +41,7 @@ const UPC = `http://127.0.0.1:${UPC_PORT}`;
 const upcCalls = {};
 const gbCalls = [];
 const upcSearchCalls = [];
+const bbCalls = [];
 // PNG real de w×h (gris) para las portadas falsas.
 const pngOf = (w, h) => {
     const chunk = (type, data) => {
@@ -61,6 +64,17 @@ const upcServer = http.createServer((req, res) => {
         if (upc === '0011111396487') return json(200, { code: 'OK', total: 1, items: [{ ean: upc, title: 'Dove Body Wash', brand: 'Dove', category: 'Health & Beauty > Personal Care > Bath & Body', images: [] }] });
         if (upc === '0078742351865') return json(429, { code: 'TOO_FAST', message: 'slow down' });
         return json(200, { code: 'OK', total: 0, items: [] });
+    }
+    // Best Buy falso: /bestbuy/products((search=a&search=b)) o /bestbuy/products(upc=...)
+    if (url.pathname.startsWith('/bestbuy/products')) {
+        const filter = decodeURIComponent(url.pathname.slice('/bestbuy/products'.length));
+        bbCalls.push({ filter, key: url.searchParams.get('apiKey') });
+        if (/search=switch/.test(filter)) return json(200, { total: 1, products: [
+            { sku: 6614313, name: 'Nintendo Switch 2 + Mario Kart World Bundle', upc: '045496884963', manufacturer: 'Nintendo', salePrice: 499.99,
+              largeFrontImage: `https://bb.example/l.jpg`, image: `${UPC}/img.png`, shortDescription: '<p>Consola</p>', categoryPath: [{ name: 'Video Games' }] },
+        ] });
+        if (filter === '(upc=045496884963)') return json(200, { total: 1, products: [{ sku: 6614313, name: 'Nintendo Switch 2 + Mario Kart World Bundle', upc: '045496884963', manufacturer: 'Nintendo', salePrice: 499.99, image: `${UPC}/img.png` }] });
+        return json(200, { total: 0, products: [] });
     }
     // Buscadores de productos falsos
     if (url.pathname === '/offsearch') {
@@ -113,7 +127,7 @@ const upcServer = http.createServer((req, res) => {
 
 // curl hace falta para la búsqueda de productos (en DreamHost ya viene cargado).
 const phpArgs = (port) => ['-d', 'extension=curl', '-S', `127.0.0.1:${port}`, '-t', WEB];
-const server = spawn('php', phpArgs(PORT), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '1', GROCMAN_GBOOKS_URL: `${UPC}/gbooks/volumes`, GROCMAN_OFF_SEARCH_URL: `${UPC}/offsearch`, GROCMAN_UPC_SEARCH_URL: `${UPC}/upcsearch`, GROCMAN_GBOOKS_COVER_URL: `${UPC}/gbooks/content` } });
+const server = spawn('php', phpArgs(PORT), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '1', GROCMAN_GBOOKS_URL: `${UPC}/gbooks/volumes`, GROCMAN_OFF_SEARCH_URL: `${UPC}/offsearch`, GROCMAN_UPC_SEARCH_URL: `${UPC}/upcsearch`, GROCMAN_BESTBUY_URL: `${UPC}/bestbuy/products`, GROCMAN_GBOOKS_COVER_URL: `${UPC}/gbooks/content` } });
 // Segundo servidor SIN permiso de pruebas: el proxy de fotos debe bloquear direcciones internas.
 const PORT2 = PORT + 500;
 const server2 = spawn('php', phpArgs(PORT2), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '' } });
@@ -321,6 +335,32 @@ try {
     await request('/api.php?productSearch=ocupado');
     check('… y no se guarda en la caché', upcSearchCalls.filter(s => s === 'ocupado').length === 2);
     check('búsqueda muy corta → 400; sin sesión → 401', (await request('/api.php?productSearch=a')).status === 400 && (await fetch(`${BASE}/api.php?productSearch=switch`)).status === 401);
+
+    console.log('Best Buy (falso) y UPCitemdb a pedido');
+    const bbs = await request('/api.php?productSearch=' + encodeURIComponent('switch 2'));
+    const bbr = (bbs.json?.results || []).find(r => r.src === 'bestbuy');
+    check('Best Buy: resultado con precio, marca y foto', bbs.json?.bestbuy === 'ok' && bbr?.code === '0045496884963' && bbr.price === 499.99 && bbr.brand === 'Nintendo' && bbr.hasImage === true, JSON.stringify(bbr));
+    check('Best Buy: palabras como search=…, con la clave del servidor', bbCalls.some(c => c.filter === '((search=switch&search=2))' && c.key === 'bb-prueba'), JSON.stringify(bbCalls));
+    const nBB = bbCalls.length;
+    await request('/api.php?productSearch=' + encodeURIComponent('Switch 2'));
+    check('Best Buy: la misma búsqueda sale de la caché', bbCalls.length === nBB);
+    check('la clave de Best Buy no llega al teléfono', !JSON.stringify(bbs.json).includes('bb-prueba'));
+    const bbImg = await fetch(`${BASE}/api.php?productImage=0045496884963`, { headers: { Cookie: cookieHeader() } });
+    check('foto de Best Buy vía el servidor (se salta la URL no pública)', bbImg.status === 200);
+    const nUpc = upcSearchCalls.length;
+    const skip = await request('/api.php?productSearch=' + encodeURIComponent('xbox series x') + '&upc=0');
+    check('upc=0 → no consulta UPCitemdb (upc:skipped)', skip.json?.upc === 'skipped' && upcSearchCalls.length === nUpc);
+    const full = await request('/api.php?productSearch=' + encodeURIComponent('xbox series x') + '&upc=1');
+    check('upc=1 → sí consulta UPCitemdb', full.json?.upc === 'ok' && upcSearchCalls.length === nUpc + 1);
+    check('upc=0 con búsqueda ya guardada: la usa', (await request('/api.php?productSearch=' + encodeURIComponent('xbox series x') + '&upc=0')).json?.upc === 'ok');
+    const bbl = await request('/api.php?lookup=045496884963');
+    check('escanear: Best Buy primero (precio y fuente), sin gastar UPCitemdb', bbl.json?.found && bbl.json.source === 'Best Buy' && bbl.json.price === 499.99 && !upcCalls['0045496884963'], JSON.stringify(bbl.json));
+    await request('/api.php?lookup=4006381333948');
+    check('si Best Buy no lo tiene: UPCitemdb', bbCalls.some(c => c.filter === '(upc=4006381333948)') && upcCalls['4006381333948'] === 1, JSON.stringify(upcCalls));
+    fs.renameSync(BESTBUY_PHP, BESTBUY_PHP + '.off');
+    const nb = bbCalls.length;
+    check('sin bestbuy.php → bestbuy:off y no se consulta', (await request('/api.php?productSearch=' + encodeURIComponent('switch 3'))).json?.bestbuy === 'off' && bbCalls.length === nb);
+    fs.renameSync(BESTBUY_PHP + '.off', BESTBUY_PHP);
 
     console.log('Buscar libros (Google Books falso)');
     const gb = await request('/api.php?books=maneater');

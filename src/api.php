@@ -213,6 +213,10 @@ function lookupProduct($code) {
         // vuelven a consultar una vez para tener la información de la vista previa.
         if ($hit && (($hit['found'] && ($hit['v'] ?? 1) >= 2) || (!$hit['found'] && time() - $hit['t'] < PRODUCT_NOT_FOUND_TTL))) { return $hit; }
         if (!function_exists('curl_init')) { fail(503, 'La búsqueda de productos no está disponible.'); }
+        // Best Buy primero (clave propia, sin el límite compartido de UPCitemdb).
+        $upc12 = strlen($code) === 13 && $code[0] === '0' ? substr($code, 1) : $code;
+        $bb = preg_match('/^\d{12,13}$/', $upc12) ? bestbuyQuery('(upc=' . $upc12 . ')', 1) : null;
+        if ($bb) { $e = $bb[0]; unset($e['code']); $cache[$code] = $e; return $e; }
         $r = httpGet(upcLookupUrl() . $code, 500000);
         $json = json_decode($r['body'], true);
         if ($r['status'] === 429 || in_array($json['code'] ?? '', ['TOO_FAST', 'EXCEED_LIMIT'], true)) {
@@ -284,6 +288,42 @@ function serveProductImage($code) {
     fail(404, 'No se pudo obtener la foto del producto.');
 }
 
+// --- Best Buy (clave propia en bestbuy.php, no se versiona) ---
+//   <?php const BESTBUY_KEY = '...';
+// Catálogo de Best Buy (electrónica, videojuegos, electrodomésticos, juguetes…)
+// con UPC, foto y precio. Sin clave no se consulta. Los productos encontrados
+// van a la caché de códigos (la foto se sirve con ?productImage=).
+if (file_exists(__DIR__ . '/bestbuy.php')) { require_once __DIR__ . '/bestbuy.php'; }
+function bestbuyKey() { return defined('BESTBUY_KEY') ? (string)BESTBUY_KEY : ''; }
+function bestbuyUrl() { return getenv('GROCMAN_BESTBUY_URL') ?: 'https://api.bestbuy.com/v1/products'; }
+// $filter: "(search=a&search=b)" o "(upc=...)". Devuelve [entradas de caché con 'code'] o null si falla.
+function bestbuyQuery($filter, $size = 10) {
+    $key = bestbuyKey();
+    if ($key === '' || !function_exists('curl_init')) { return null; }
+    $show = 'sku,name,upc,manufacturer,salePrice,image,largeFrontImage,shortDescription,categoryPath.name';
+    $r = httpGet(bestbuyUrl() . $filter . '?' . http_build_query(['apiKey' => $key, 'format' => 'json', 'show' => $show, 'pageSize' => $size]), 1500000);
+    $json = json_decode($r['body'], true);
+    if (!$r['ok'] || $r['status'] !== 200 || !is_array($json)) { return null; }
+    $out = [];
+    foreach ((array)($json['products'] ?? []) as $p) {
+        $code = searchCode($p['upc'] ?? '');
+        $title = trim(preg_replace('/\s+/', ' ', (string)($p['name'] ?? '')));
+        if (!$code || $title === '') { continue; }
+        $images = array_values(array_filter([$p['largeFrontImage'] ?? null, $p['image'] ?? null], function ($u) { return is_string($u) && preg_match('#^https?://#i', $u); }));
+        $path = implode(' > ', array_column((array)($p['categoryPath'] ?? []), 'name'));
+        $out[] = ['code' => $code, 't' => time(), 'v' => 2, 'found' => true, 'src' => 'bestbuy', 'title' => $title,
+            'brand' => trim((string)($p['manufacturer'] ?? '')), 'category' => categoryFromUpc($path, $title),
+            'images' => array_slice($images, 0, 2), 'description' => cutText(trim(strip_tags((string)($p['shortDescription'] ?? ''))), 700),
+            'size' => '', 'price' => is_numeric($p['salePrice'] ?? null) ? round((float)$p['salePrice'], 2) : null];
+    }
+    return $out;
+}
+// Palabras de búsqueda para Best Buy (solo letras y números).
+function bestbuyWords($q) {
+    $w = array_values(array_filter(preg_split('/[^\p{L}\p{N}]+/u', $q), function ($x) { return $x !== ''; }));
+    return array_slice($w, 0, 8);
+}
+
 // --- Buscar productos por nombre ---
 // Open Food Facts (alimentos; su buscador no permite CORS) y UPCitemdb (todo
 // lo demás: electrónica, juguetes…; 100 consultas/día compartidas con el
@@ -298,9 +338,31 @@ function searchCode($c) {
     if (strlen($c) >= 8 && strlen($c) < 12) { $c = str_pad($c, 12, '0', STR_PAD_LEFT); }
     return normalizeBarcode($c);
 }
-function searchProducts($q) {
-    if (!function_exists('curl_init')) { return ['results' => [], 'upc' => 'off']; }
+function searchProducts($q, $withUpc = true) {
+    if (!function_exists('curl_init')) { return ['results' => [], 'upc' => 'off', 'bestbuy' => 'off']; }
     $out = [];
+    // Best Buy (con caché de 1 día: los precios cambian)
+    $bb = 'off';
+    if (bestbuyKey() !== '' && ($words = bestbuyWords($q))) {
+        $key = 'b:' . strtolower(implode(' ', $words));
+        $items = withProductCache(function (&$cache) use ($key, $words, &$bb) {
+            $hit = $cache[$key] ?? null;
+            if ($hit && time() - $hit['t'] < 86400) {
+                $bb = 'ok';
+                return array_values(array_filter(array_map(function ($c) use ($cache) { return isset($cache[$c]) && $cache[$c]['found'] ? ['code' => $c] + $cache[$c] : null; }, $hit['codes'])));
+            }
+            $found = bestbuyQuery('((' . implode('&', array_map(function ($w) { return 'search=' . rawurlencode($w); }, $words)) . '))');
+            if ($found === null) { $bb = 'error'; return []; }
+            $bb = 'ok';
+            foreach ($found as $e) { $c = $e['code']; unset($e['code']); $cache[$c] = $e; }
+            $cache[$key] = ['t' => time(), 'codes' => array_column($found, 'code')];
+            return $found;
+        });
+        foreach ($items as $e) {
+            $out[] = ['src' => 'bestbuy', 'code' => $e['code'], 'title' => cutText($e['title'], 200), 'brand' => cutText($e['brand'], 100),
+                'quantity' => '', 'category' => $e['category'], 'hasImage' => !empty($e['images']), 'price' => $e['price'] ?? null];
+        }
+    }
     // Open Food Facts
     $r = httpGet(offSearchUrl() . '?' . http_build_query(['q' => $q, 'page_size' => 12, 'langs' => 'es,en',
         'fields' => 'code,product_name,product_name_es,product_name_en,brands,quantity,categories_tags,image_front_small_url,image_front_url']), 2000000);
@@ -319,14 +381,15 @@ function searchProducts($q) {
             'image' => preg_match('#^https://images\.openfoodfacts\.org/#', $img) ? $img : '',
         ];
     }
-    // UPCitemdb (con caché)
+    // UPCitemdb (con caché; sin caché solo si se pide: tiene 100 consultas al día)
     $key = 's:' . strtolower(preg_replace('/\s+/', ' ', trim($q)));
     $upc = 'ok';
-    $items = withProductCache(function (&$cache) use ($key, $q, &$upc) {
+    $items = withProductCache(function (&$cache) use ($key, $q, &$upc, $withUpc) {
         $hit = $cache[$key] ?? null;
         if ($hit && time() - $hit['t'] < PRODUCT_SEARCH_TTL) {
             return array_values(array_filter(array_map(function ($c) use ($cache) { return isset($cache[$c]) && $cache[$c]['found'] ? ['code' => $c] + $cache[$c] : null; }, $hit['codes'])));
         }
+        if (!$withUpc) { $upc = 'skipped'; return []; }
         $r = httpGet(upcSearchUrl() . '?' . http_build_query(['s' => $q, 'match_mode' => 0, 'type' => 'product']), 1500000);
         $json = json_decode($r['body'], true);
         if ($r['status'] === 429 || in_array($json['code'] ?? '', ['TOO_FAST', 'EXCEED_LIMIT'], true)) { $upc = 'busy'; return []; }
@@ -355,7 +418,9 @@ function searchProducts($q) {
         $out[] = ['src' => 'upc', 'code' => $e['code'], 'title' => cutText($e['title'], 200), 'brand' => cutText($e['brand'], 100),
             'quantity' => cutText($e['size'] ?? '', 60), 'category' => $e['category'], 'hasImage' => !empty($e['images'])];
     }
-    return ['results' => $out, 'upc' => $upc];
+    // Sin repetir un código (gana la primera fuente: Best Buy trae precio).
+    $seen = []; $out = array_values(array_filter($out, function ($r) use (&$seen) { if (isset($seen[$r['code']])) { return false; } return $seen[$r['code']] = true; }));
+    return ['results' => $out, 'upc' => $upc, 'bestbuy' => $bb];
 }
 
 // --- Google Books (fuente principal para buscar libros) ---
@@ -703,7 +768,8 @@ if ($method === 'GET') {
         $p = lookupProduct($code);
         echo json_encode($p['found']
             ? ['found' => true, 'name' => $p['title'], 'brand' => $p['brand'], 'category' => $p['category'], 'hasImage' => !empty($p['images']),
-               'description' => $p['description'] ?? '', 'size' => $p['size'] ?? '']
+               'description' => $p['description'] ?? '', 'size' => $p['size'] ?? '', 'price' => $p['price'] ?? null,
+               'source' => ($p['src'] ?? '') === 'bestbuy' ? 'Best Buy' : 'UPCitemdb']
             : ['found' => false]);
         exit();
     }
@@ -711,7 +777,7 @@ if ($method === 'GET') {
         $q = trim((string)$_GET['productSearch']);
         if (strlen($q) < 2 || strlen($q) > 200) { fail(400, 'Búsqueda inválida.'); }
         session_write_close();
-        echo json_encode(searchProducts($q), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode(searchProducts($q, ($_GET['upc'] ?? '1') === '1'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit();
     }
     if (isset($_GET['books'])) {

@@ -15,6 +15,8 @@ src/data/login_attempts.json
 src/auth.php
 # Clave de la API de Google Books
 src/google.php
+# Clave de la API de Best Buy
+src/bestbuy.php
 
 # Credenciales de despliegue (FTP/SFTP) — nunca versionar
 deploy.local.ini

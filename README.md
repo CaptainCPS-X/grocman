@@ -62,10 +62,15 @@ en la URL (`#listas/books`): al recargar se vuelve al mismo lugar.
   (`data/backups/items-antes-borrar-lista-*.json`) antes de borrar una lista.
   Un artículo cambia de lista desde Editar → "Lista".
 **Buscar** (en Agregar y junto a "Agregar a …" en cada lista) tiene dos modos:
-**Productos** — por nombre en Open Food Facts (alimentos) y UPCitemdb (todo lo
-demás: electrónica, juguetes…), vía el servidor (`api.php?productSearch=`; cada
-búsqueda de UPCitemdb se guarda 7 días en `products.json`), o por código de
-barras (si no está: "Agregar con este código") — y **Libros** (ver arriba). El
+**Productos** — por nombre en Open Food Facts (alimentos), **Best Buy**
+(electrónica, videojuegos, juguetes…, con precio; clave en `src/bestbuy.php`,
+`<?php const BESTBUY_KEY = '...';`, no se versiona) y UPCitemdb, vía el
+servidor (`api.php?productSearch=`). UPCitemdb (100 consultas/día **por IP**,
+compartidas en el hosting) solo se consulta al tocar Buscar / Enter o "Buscar
+también en UPCitemdb"; cada búsqueda se guarda 7 días en `products.json` (Best
+Buy, 1 día). Al final: "¿No está? Buscar «…» en" las tiendas. Por código de
+barras (si no está: "Agregar con este código"); al escanear, Best Buy se
+consulta antes que UPCitemdb — y **Libros** (ver arriba). El
 modo inicial depende de la lista. Junto a cada código de producto hay copiar,
 Google y **Tiendas** (Walmart, Target, Best Buy, Amazon, Costco, eBay,
 UPCitemdb), que buscan el UPC de 12 dígitos.

@@ -953,7 +953,8 @@ const app = {
         try {
             const r = await fetch(`api.php?lookup=${code}`);
             const j = r.ok ? await r.json() : {};
-            if (j.found) return row('Producto', j.name) + row('Marca', j.brand) + row('Tamaño', j.size) + para(j.description) + codeRow + '<p class="lb-src">Fuente: UPCitemdb</p>';
+            if (j.found) return row('Producto', j.name) + row('Marca', j.brand) + row('Tamaño', j.size) + row('Precio', j.price ? '$' + Number(j.price).toFixed(2) : '')
+                + para(j.description) + codeRow + `<p class="lb-src">Fuente: ${app.esc(j.source || 'UPCitemdb')}</p>`;
         } catch (e) { }
         return codeRow + '<p class="lb-empty">Sin información adicional de este producto.</p>';
     },
@@ -1544,7 +1545,7 @@ const app = {
             const j = await res.json().catch(() => ({}));
             if (res.ok && j.found) {
                 return (app.productCache[code] = {
-                    name: j.name, brand: j.brand || '', quantity: '',
+                    name: j.name, brand: j.brand || '', quantity: '', price: j.price || null,
                     label: j.name,
                     image: j.hasImage ? `api.php?productImage=${code}` : '',
                     category: j.category || null
@@ -1639,6 +1640,14 @@ const app = {
     // from: 'add' (desde la hoja Agregar, se vuelve a ella) o el id de la lista
     // de colección donde se agregará.
     openBookSearch: (from) => app.openSearch(from, 'books'),
+    onSearchKey: (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        clearTimeout(app.bookSearchTimer);
+        const q = e.target.value.trim();
+        if (q.length >= 2) app.runSearch(q, true);
+        e.target.blur(); // baja el teclado para ver los resultados
+    },
     // Buscar: productos (Open Food Facts + UPCitemdb) o libros (Google Books +
     // Open Library). El modo inicial sale de la lista: Libros → libros; el resto → productos.
     openSearch: (from, mode) => {
@@ -1667,9 +1676,11 @@ const app = {
         if (q.length >= 3) app.runSearch(q);
         document.getElementById('book-search-input').focus({ preventScroll: true });
     },
-    runSearch: (q) => app.bookSearch.mode === 'books' ? app.runBookSearch(q, 1) : app.runProductSearch(q),
+    // withUpc: incluir UPCitemdb (al tocar Buscar en el teclado o el botón; mientras
+    // se escribe solo Open Food Facts y Best Buy, que no tienen ese límite diario).
+    runSearch: (q, withUpc = false) => app.bookSearch.mode === 'books' ? app.runBookSearch(q, 1) : app.runProductSearch(q, withUpc),
     // Productos: por nombre (servidor) o por código de barras (como al escanear).
-    runProductSearch: async (q) => {
+    runProductSearch: async (q, withUpc = false) => {
         const bs = app.bookSearch, seq = ++bs.seq, box = document.getElementById('book-results');
         box.innerHTML = '<p class="bs-hint">Buscando…</p>';
         bs.code = ''; bs.upc = 'ok';
@@ -1687,7 +1698,7 @@ const app = {
         }
         let j = null;
         try {
-            const r = await fetch(`api.php?productSearch=${encodeURIComponent(q)}`);
+            const r = await fetch(`api.php?productSearch=${encodeURIComponent(q)}&upc=${withUpc ? 1 : 0}`);
             if (r.status === 401) { location.reload(); return; }
             if (r.ok) j = await r.json();
         } catch (e) { }
@@ -1697,7 +1708,7 @@ const app = {
         for (const r of j.results || []) {
             if (seen.has(r.code)) continue;
             seen.add(r.code);
-            const img = r.src === 'off' ? r.image : (r.hasImage ? `api.php?productImage=${r.code}` : '');
+            const img = r.src === 'off' ? r.image : (r.hasImage ? `api.php?productImage=${r.code}` : ''); // UPCitemdb / Best Buy: vía el servidor
             docs.push({ ...r, thumb: r.src === 'off' ? (r.thumb || r.image) : img, image: img, authors: r.brand ? [r.brand] : [],
                 category: r.category || (r.tags ? app.categoryFromTags(r.tags, 'world.openfoodfacts.org') : null) });
         }
@@ -1719,12 +1730,14 @@ const app = {
                 </div>`;
             return;
         }
-        const busy = bs.upc === 'busy' ? '<p class="bs-sub bs-note">UPCitemdb llegó a su límite de hoy (100 consultas): solo se muestran resultados de Open Food Facts.</p>' : '';
+        const busy = (bs.upc === 'busy' ? '<p class="bs-sub bs-note">UPCitemdb llegó a su límite de hoy: se muestran las demás fuentes.</p>' : '')
+            + (bs.upc === 'skipped' ? `<button type="button" class="btn-secondary bs-upc">${app.svgIcon('search')}Buscar también en UPCitemdb</button>` : '')
+            + app.storeSearchHTML(bs.q);
         if (!bs.docs.length) { box.innerHTML = '<p class="bs-hint">Sin resultados. Prueba con otras palabras o con el código de barras.</p>' + busy; return; }
         box.innerHTML = bs.docs.map((d, i) => {
             const owner = app.productOwner(d);
             const img = d.thumb ? `<img src="${app.esc(d.thumb)}" alt="" loading="lazy" decoding="async">` : app.catIcon(d.category || 'Otros');
-            const meta = [d.brand, d.quantity].filter(Boolean).join(' · ');
+            const meta = [d.brand, d.quantity, d.price ? '$' + Number(d.price).toFixed(2) : ''].filter(Boolean).join(' · ');
             return `<button type="button" class="bs-row bs-prod${owner ? ' owned' : ''}" data-i="${i}">
                 <span class="bs-cover bs-thumb-sq">${img}</span>
                 <span class="bs-text"><strong>${app.esc(d.title)}</strong>${meta ? `<span>${app.esc(meta)}</span>` : ''}<span class="bs-code">${d.code}</span>${owner ? `<em>Ya está en ${app.esc((app.listOf(owner) || {}).name || 'tus listas')}</em>` : ''}</span>
@@ -1743,6 +1756,7 @@ const app = {
         document.getElementById('new-name').value = name;
         const cat = document.getElementById('new-cat');
         if (d.category && [...cat.options].some(o => o.value === d.category)) cat.value = d.category;
+        if (d.price && !document.getElementById('new-price').value) document.getElementById('new-price').value = Number(d.price).toFixed(2);
         app.addBarcodes = app.addBarcodes.filter(b => b.code !== d.code);
         app.addBarcodes.push({ code: d.code, label: [d.brand, d.title, d.quantity].filter(Boolean).join(' · ').slice(0, 200) });
         app.renderBarcodes('add');
@@ -1971,6 +1985,8 @@ const app = {
         const bs = app.bookSearch;
         if (bs.mode === 'products') {
             if (e.target.closest('.bs-manual')) { app.addManualCode(bs.code); return; }
+            if (e.target.closest('.bs-upc')) { app.runProductSearch(bs.q, true); return; }
+            if (e.target.closest('.store-link')) return; // enlace a una tienda
             const row = e.target.closest('.bs-row');
             const d = row && bs.docs[+row.dataset.i];
             if (!d) return;
@@ -2076,6 +2092,20 @@ const app = {
         ['eBay', 'ebay', 'https://www.ebay.com/sch/i.html?_nkw='],
         ['UPCitemdb', 'upcitemdb', 'https://www.upcitemdb.com/upc/'],
     ],
+    // "¿No está? Buscar «texto» en…": busca el nombre en las tiendas (no gasta consultas).
+    STORES_TEXT: [
+        ['Walmart', 'walmart', 'https://www.walmart.com/search?q='],
+        ['Target', 'target', 'https://www.target.com/s?searchTerm='],
+        ['Best Buy', 'bestbuy', 'https://www.bestbuy.com/site/searchpage.jsp?st='],
+        ['Amazon', 'amazon', 'https://www.amazon.com/s?k='],
+        ['Costco', 'costco', 'https://www.costco.com/CatalogSearch?keyword='],
+        ['eBay', 'ebay', 'https://www.ebay.com/sch/i.html?_nkw='],
+        ['Google Shopping', 'google', 'https://www.google.com/search?tbm=shop&q='],
+    ],
+    storeSearchHTML: (q) => !q ? '' : `<div class="bs-stores">
+        <p class="bs-sub">¿No está? Buscar «${app.esc(q)}» en:</p>
+        <span class="store-links">${app.STORES_TEXT.map(([n, k, u]) => `<a class="store-link st-${k}" href="${u}${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${n}</a>`).join('')}</span>
+    </div>`,
     upcActionsHTML: (code) => {
         // Las tiendas de EE. UU. buscan por UPC-A (12 dígitos): se quita el 0 del EAN-13.
         const upc = code.length === 13 && code[0] === '0' ? code.slice(1) : code, c = app.esc(code);
@@ -2165,6 +2195,7 @@ const app = {
             const nameEl = document.getElementById('new-name');
             if (!nameEl.value.trim() && info.name) nameEl.value = info.name;
             if (info.category) document.getElementById('new-cat').value = info.category;
+            if (info.price && !document.getElementById('new-price').value) document.getElementById('new-price').value = Number(info.price).toFixed(2);
             app.useProductPhoto(app.iconPickers.new, info);
         } else {
             app.showToast('Producto no encontrado: escribe el nombre');
