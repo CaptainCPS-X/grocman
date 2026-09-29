@@ -61,7 +61,9 @@ toque) con su información:
 libros (Open Library: autor, año, páginas, editorial, sinopsis, temas), comida
 (Open Food Facts: marca, cantidad, Nutri-Score, NOVA, nutrición por 100 g,
 ingredientes, alérgenos) y otros productos (UPCitemdb: marca, tamaño,
-descripción). La información se pide al abrir la vista previa; no se guarda en
+descripción). Junto a cada ISBN (vista previa y códigos en Agregar/Editar) hay botones
+para **copiarlo** y **buscarlo en Google o Amazon**. La información se pide al
+abrir la vista previa; no se guarda en
 `items.json`.
 
 Cada artículo tiene un estado: `needed` (falta; con `basket: true` si está en

@@ -14,6 +14,7 @@ const app = {
         flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
         barcode: '<path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+        copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
         grid: '<rect width="7" height="10" x="3" y="3" rx="1"/><rect width="7" height="10" x="14" y="3" rx="1"/><path d="M3 17h7M14 17h7M3 21h5M14 21h5"/>',
         rows: '<rect width="5" height="7" x="3" y="3" rx="1"/><rect width="5" height="7" x="3" y="14" rx="1"/><path d="M11 5h10M11 8h6M11 16h10M11 19h6"/>',
         search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
@@ -70,6 +71,10 @@ const app = {
         basket.addEventListener('click', app.onBasketClick);
         inventory.addEventListener('click', app.onInventoryClick);
         lists.addEventListener('click', app.onListsClick);
+        document.addEventListener('click', (e) => {
+            const cp = e.target.closest('.isbn-copy');
+            if (cp) { e.preventDefault(); e.stopPropagation(); app.copyText(cp.dataset.copy); }
+        }, true);
         // Portadas grandes de los libros: si la imagen no tiene versión grande, la miniatura.
         lists.addEventListener('error', (e) => {
             const img = e.target;
@@ -915,9 +920,10 @@ const app = {
         const code = codes[0];
         if (app.isISBN(code)) {
             const b = await app.lookupBook(code);
-            if (!b) return '<p class="lb-empty">Sin información de este libro.</p>';
+            const isbnRow = `<div class="lb-row lb-isbn"><span class="lb-k">ISBN</span><span class="lb-v">${app.esc(code)}</span>${app.isbnActionsHTML(code)}</div>`;
+            if (!b) return isbnRow + '<p class="lb-empty">Sin más información de este libro en Google Books ni en Open Library.</p>';
             return row('Autor', (b.authors || []).join(', ')) + row('Año', b.year) + row('Páginas', b.pages) + row('Editorial', b.publisher)
-                + row('ISBN', code) + para(b.description) + tags(b.subjects) + `<p class="lb-src">Fuente: ${app.esc(b.source || 'Open Library')}</p>`;
+                + isbnRow + para(b.description) + tags(b.subjects) + `<p class="lb-src">Fuente: ${app.esc(b.source || 'Open Library')}</p>`;
         }
         const off = await app.foodDetails(code);
         if (off) {
@@ -1572,7 +1578,7 @@ const app = {
                 <div class="bc-info">
                     ${b.loading ? '<div class="bc-label">Buscando producto…</div>'
                         : `<input class="bc-label-input" data-i="${i}" value="${app.esc(b.label)}" placeholder="Nombre del producto" aria-label="Nombre del producto ${app.esc(b.code)}" maxlength="200">`}
-                    <div class="bc-code">${app.esc(b.code)}</div>
+                    <div class="bc-code">${app.esc(b.code)}${app.isISBN(b.code) ? app.isbnActionsHTML(b.code) : ''}</div>
                 </div>
                 <button type="button" class="bc-remove" data-i="${i}" aria-label="Quitar ${app.esc(b.label || b.code)}">${app.svgIcon('x')}</button>
             </div>`).join('');
@@ -1899,6 +1905,28 @@ const app = {
         entry.label = info ? info.label : '';
         app.renderBarcodes('edit');
         app.useProductPhoto(app.iconPickers.edit, info);
+    },
+
+    // Botones junto a un ISBN: copiarlo y buscarlo en Google o Amazon (libros).
+    isbnActionsHTML: (code) => {
+        const c = app.esc(code);
+        return `<span class="isbn-actions">
+            <button type="button" class="isbn-act isbn-copy" data-copy="${c}" title="Copiar ISBN" aria-label="Copiar ISBN ${c}">${app.svgIcon('copy')}</button>
+            <a class="isbn-act isbn-google" href="https://www.google.com/search?q=${encodeURIComponent('ISBN ' + code)}" target="_blank" rel="noopener noreferrer" title="Buscar en Google" aria-label="Buscar ISBN ${c} en Google"><span class="g-mark">G</span></a>
+            <a class="isbn-act isbn-amazon" href="https://www.amazon.com/s?k=${encodeURIComponent(code)}&i=stripbooks" target="_blank" rel="noopener noreferrer" title="Buscar en Amazon" aria-label="Buscar ISBN ${c} en Amazon">a</a>
+        </span>`;
+    },
+    copyText: async (text) => {
+        let ok = false;
+        try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+            // Respaldo (navegadores sin permiso de portapapeles)
+            const t = document.createElement('textarea');
+            t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+            document.body.appendChild(t); t.select();
+            try { ok = document.execCommand('copy'); } catch (e2) { }
+            t.remove();
+        }
+        app.showToast(ok ? 'ISBN copiado' : 'No se pudo copiar');
     },
 
     // ISBN-13 (978/979): el código de barras de un libro.
