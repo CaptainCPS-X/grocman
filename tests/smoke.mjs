@@ -38,6 +38,7 @@ const UPC_PORT = PORT + 1000;
 const UPC = `http://127.0.0.1:${UPC_PORT}`;
 const upcCalls = {};
 const gbCalls = [];
+const upcSearchCalls = [];
 // PNG real de w×h (gris) para las portadas falsas.
 const pngOf = (w, h) => {
     const chunk = (type, data) => {
@@ -60,6 +61,22 @@ const upcServer = http.createServer((req, res) => {
         if (upc === '0011111396487') return json(200, { code: 'OK', total: 1, items: [{ ean: upc, title: 'Dove Body Wash', brand: 'Dove', category: 'Health & Beauty > Personal Care > Bath & Body', images: [] }] });
         if (upc === '0078742351865') return json(429, { code: 'TOO_FAST', message: 'slow down' });
         return json(200, { code: 'OK', total: 0, items: [] });
+    }
+    // Buscadores de productos falsos
+    if (url.pathname === '/offsearch') {
+        return json(200, { count: 2, hits: [
+            { code: '16000435094', product_name: 'Cheerios', brands: ['General Mills'], quantity: '18 oz', categories_tags: ['en:breakfast-cereals'], image_front_small_url: 'https://images.openfoodfacts.org/x/s.jpg', image_front_url: 'https://images.openfoodfacts.org/x/l.jpg' },
+            { code: 'abc', product_name: 'Sin código' },
+        ] });
+    }
+    if (url.pathname === '/upcsearch') {
+        const s = url.searchParams.get('s');
+        upcSearchCalls.push(s);
+        if (s === 'ocupado') return json(429, { code: 'TOO_FAST' });
+        return json(200, { code: 'OK', total: 2, items: [
+            { ean: '0045496452308', title: 'Nintendo  Switch 2 Console', brand: 'Nintendo', category: 'Electronics > Video Games', images: [`${UPC}/img.png`] },
+            { upc: '199284281530', title: 'Switch 2 Bundle', brand: 'Nintendo', images: [] },
+        ] });
     }
     // Google Books falso
     if (url.pathname === '/gbooks/volumes') {
@@ -96,7 +113,7 @@ const upcServer = http.createServer((req, res) => {
 
 // curl hace falta para la búsqueda de productos (en DreamHost ya viene cargado).
 const phpArgs = (port) => ['-d', 'extension=curl', '-S', `127.0.0.1:${port}`, '-t', WEB];
-const server = spawn('php', phpArgs(PORT), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '1', GROCMAN_GBOOKS_URL: `${UPC}/gbooks/volumes`, GROCMAN_GBOOKS_COVER_URL: `${UPC}/gbooks/content` } });
+const server = spawn('php', phpArgs(PORT), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '1', GROCMAN_GBOOKS_URL: `${UPC}/gbooks/volumes`, GROCMAN_OFF_SEARCH_URL: `${UPC}/offsearch`, GROCMAN_UPC_SEARCH_URL: `${UPC}/upcsearch`, GROCMAN_GBOOKS_COVER_URL: `${UPC}/gbooks/content` } });
 // Segundo servidor SIN permiso de pruebas: el proxy de fotos debe bloquear direcciones internas.
 const PORT2 = PORT + 500;
 const server2 = spawn('php', phpArgs(PORT2), { stdio: 'ignore', env: { ...process.env, GROCMAN_UPC_URL: `${UPC}/lookup`, GROCMAN_ALLOW_PRIVATE_IMAGES: '' } });
@@ -286,6 +303,24 @@ try {
     check('UPCitemdb ocupado → 503 y NO se recuerda', (await request('/api.php?lookup=0078742351865')).status === 503 && (await request('/api.php?lookup=0078742351865')).status === 503 && upcCalls['0078742351865'] === 2);
     check('código inválido → 400', (await request('/api.php?lookup=123')).status === 400);
     check('búsqueda sin sesión → 401', (await fetch(`${BASE}/api.php?lookup=037000222057`)).status === 401);
+
+    console.log('Buscar productos (Open Food Facts y UPCitemdb falsos)');
+    const ps = await request('/api.php?productSearch=' + encodeURIComponent('switch 2'));
+    const byCode = Object.fromEntries((ps.json?.results || []).map(r => [r.code, r]));
+    check('resultados de las dos fuentes', ps.json?.upc === 'ok' && byCode['0045496452308']?.src === 'upc' && byCode['0016000435094']?.src === 'off', JSON.stringify(ps.json));
+    check('UPC de 11/12 dígitos → EAN-13 válido; sin código se descarta', !!byCode['0199284281530'] && !(ps.json?.results || []).some(r => r.title === 'Sin código'));
+    check('UPCitemdb: categoría, marca y foto', byCode['0045496452308']?.category === 'Otros' || byCode['0045496452308']?.brand === 'Nintendo' && byCode['0045496452308']?.hasImage === true);
+    check('Open Food Facts: solo imágenes de images.openfoodfacts.org', byCode['0016000435094']?.thumb === 'https://images.openfoodfacts.org/x/s.jpg' && byCode['0016000435094']?.tags?.[0] === 'en:breakfast-cereals');
+    await request('/api.php?productSearch=' + encodeURIComponent('Switch   2'));
+    check('la misma búsqueda sale de la caché (UPCitemdb 1 vez)', upcSearchCalls.filter(s => /switch/i.test(s)).length === 1, JSON.stringify(upcSearchCalls));
+    const pimg = await fetch(`${BASE}/api.php?productImage=0045496452308`, { headers: { Cookie: cookieHeader() } });
+    check('la foto de un resultado se sirve sin otra consulta', pimg.status === 200);
+    check('escanear un resultado ya no gasta consulta', (await request('/api.php?lookup=0045496452308')).json?.name === 'Nintendo Switch 2 Console' && !upcCalls['0045496452308']);
+    const busy = await request('/api.php?productSearch=ocupado');
+    check('UPCitemdb ocupado → upc:busy, solo Open Food Facts', busy.json?.upc === 'busy' && busy.json.results.every(r => r.src === 'off'));
+    await request('/api.php?productSearch=ocupado');
+    check('… y no se guarda en la caché', upcSearchCalls.filter(s => s === 'ocupado').length === 2);
+    check('búsqueda muy corta → 400; sin sesión → 401', (await request('/api.php?productSearch=a')).status === 400 && (await fetch(`${BASE}/api.php?productSearch=switch`)).status === 401);
 
     console.log('Buscar libros (Google Books falso)');
     const gb = await request('/api.php?books=maneater');

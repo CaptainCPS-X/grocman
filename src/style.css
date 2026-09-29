@@ -1076,3 +1076,36 @@ body {
 .bc-code .isbn-google { font-size: 15px; }
 .bc-code .isbn-amazon { font-size: 15px; }
 .bc-code .isbn-amazon::after { left: 7px; right: 6px; bottom: 4px; height: 4px; }
+
+/* Buscar: modos Productos / Libros */
+.search-mode { flex: none; display: flex; gap: 4px; padding: 3px; margin-bottom: 10px; border-radius: 11px; background: rgba(0, 0, 0, 0.05); }
+.sm-opt { flex: 1; padding: 8px; border: none; border-radius: 8px; background: transparent; color: #6c757d; font: 600 14px/1 inherit; font-family: inherit; cursor: pointer; }
+.sm-opt.active { background: #fff; color: var(--primary-dark); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.sm-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+/* Resultados de productos: foto cuadrada completa */
+.bs-cover.bs-thumb-sq { width: 56px; height: 56px; border-radius: 10px; background: #fff; color: #6f8fbf; }
+.bs-cover.bs-thumb-sq img { object-fit: contain; }
+.bs-text .bs-code { font-size: 11.5px; color: #adb5bd; font-variant-numeric: tabular-nums; letter-spacing: 0.3px; }
+.bs-note { margin: 6px 0 4px; }
+
+/* Tiendas junto a un código */
+.store-toggle { width: auto; padding: 0 8px; gap: 4px; font: 600 12.5px/1 inherit; font-family: inherit; color: #495057; }
+.store-toggle .lucide { width: 14px; height: 14px; }
+.store-toggle .st-chev { width: 13px; height: 13px; transition: transform 0.2s; }
+.store-toggle[aria-expanded="true"] .st-chev { transform: rotate(180deg); }
+.store-links { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; margin-top: 6px; }
+.store-links[hidden] { display: none; }
+.store-link {
+    padding: 6px 10px; border-radius: 999px; font: 700 12.5px/1 Arial, Helvetica, sans-serif; text-decoration: none;
+    background: #fff; border: 1px solid rgba(0, 0, 0, 0.1); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.store-link:active { transform: scale(0.95); }
+.st-walmart { color: #0071dc; }
+.st-target { color: #cc0000; }
+.st-bestbuy { color: #0046be; box-shadow: inset 0 -3px 0 #ffe000; }
+.st-amazon { color: #131921; box-shadow: inset 0 -3px 0 #ff9900; }
+.st-costco { color: #e31837; }
+.st-ebay { color: #3665f3; }
+.st-upcitemdb { color: #6c757d; }
+.lb-row.lb-isbn { flex-wrap: wrap; }
+.bc-code .store-toggle { padding: 0 7px; font-size: 12px; }

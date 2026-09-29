@@ -14,6 +14,7 @@ const app = {
         flashlight: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/>',
         barcode: '<path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+        bag: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
         copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
         grid: '<rect width="7" height="10" x="3" y="3" rx="1"/><rect width="7" height="10" x="14" y="3" rx="1"/><path d="M3 17h7M14 17h7M3 21h5M14 21h5"/>',
         rows: '<rect width="5" height="7" x="3" y="3" rx="1"/><rect width="5" height="7" x="3" y="14" rx="1"/><path d="M11 5h10M11 8h6M11 16h10M11 19h6"/>',
@@ -73,7 +74,14 @@ const app = {
         lists.addEventListener('click', app.onListsClick);
         document.addEventListener('click', (e) => {
             const cp = e.target.closest('.isbn-copy');
-            if (cp) { e.preventDefault(); e.stopPropagation(); app.copyText(cp.dataset.copy); }
+            if (cp) { e.preventDefault(); e.stopPropagation(); app.copyText(cp.dataset.copy); return; }
+            const st = e.target.closest('.store-toggle');
+            if (st) {
+                e.preventDefault(); e.stopPropagation();
+                const links = st.parentElement.nextElementSibling;
+                links.hidden = !links.hidden;
+                st.setAttribute('aria-expanded', String(!links.hidden));
+            }
         }, true);
         // Portadas grandes de los libros: si la imagen no tiene versión grande, la miniatura.
         lists.addEventListener('error', (e) => {
@@ -478,7 +486,7 @@ const app = {
         </div>
         <div class="list-actions">
             <button type="button" class="list-add" data-action="add">${app.svgIcon('plus')}Agregar a ${app.esc(l.name)}</button>
-            ${l.type === 'collection' ? `<button type="button" class="list-add list-search" data-action="search">${app.svgIcon('search')}Buscar libro</button>` : ''}
+            <button type="button" class="list-add list-search" data-action="search">${app.svgIcon('search')}Buscar</button>
         </div>`;
         if (!its.length) { c.innerHTML = head + '<div class="view-empty">Esta lista está vacía.</div>'; return; }
         const isCol = l.type === 'collection', view = isCol ? app.listView(l.id) : 'list';
@@ -531,7 +539,7 @@ const app = {
             if (a === 'back') { app.openListId = null; app.renderLists(); }
             else if (a === 'menu') app.openListMenu(app.openListId);
             else if (a === 'add') app.openAddSheet(app.openListId);
-            else if (a === 'search') app.openBookSearch(app.openListId);
+            else if (a === 'search') app.openSearch(app.openListId);
             else if (a === 'view') app.setListView(app.openListId, act.dataset.view);
             return;
         }
@@ -842,10 +850,7 @@ const app = {
         const list = app.segValue(`${p}-list`), type = (app.listById(list) || {}).type;
         document.getElementById(`${p}-cat-field`).hidden = list === 'books';
         document.getElementById(`${p}-author-field`).hidden = type !== 'collection';
-        if (p === 'new') {
-            document.getElementById('new-booksearch').hidden = type !== 'collection';
-            document.querySelector('#add-sheet .scan-row .btn-scan span').textContent = type === 'collection' ? 'Escanear' : 'Escanear producto';
-        }
+        if (p === 'new') document.querySelector('#add-sheet .scan-row .btn-scan span').textContent = 'Escanear';
         if (p === 'edit') app.updateLevelField();
     },
     updateLevelField: () => {
@@ -928,6 +933,7 @@ const app = {
             return row('Autor', (b.authors || []).join(', ')) + row('Año', b.year) + row('Páginas', b.pages) + row('Editorial', b.publisher)
                 + isbnRow + para(b.description) + tags(b.subjects) + `<p class="lb-src">Fuente: ${app.esc(b.source || 'Open Library')}</p>`;
         }
+        const codeRow = `<div class="lb-row lb-isbn"><span class="lb-k">Código</span><span class="lb-v">${app.esc(code)}</span>${app.upcActionsHTML(code)}</div>`;
         const off = await app.foodDetails(code);
         if (off) {
             const p = off.product, n = p.nutriments || {};
@@ -942,14 +948,14 @@ const app = {
                 + (nut.length ? `<div class="lb-nutri"><div class="lb-k">Nutrición ${per}</div>${nut.map(([k, v]) => `<div class="lb-nrow"><span>${k}</span><span>${v}</span></div>`).join('')}</div>` : '')
                 + (p.ingredients_text_es || p.ingredients_text_en || p.ingredients_text ? `<div class="lb-k">Ingredientes</div>${para(p.ingredients_text_es || p.ingredients_text_en || p.ingredients_text)}` : '')
                 + (allergens.length ? row('Alérgenos', allergens.join(', ')) : '')
-                + `<p class="lb-src">Fuente: Open ${off.db} Facts</p>`;
+                + codeRow + `<p class="lb-src">Fuente: Open ${off.db} Facts</p>`;
         }
         try {
             const r = await fetch(`api.php?lookup=${code}`);
             const j = r.ok ? await r.json() : {};
-            if (j.found) return row('Producto', j.name) + row('Marca', j.brand) + row('Tamaño', j.size) + para(j.description) + '<p class="lb-src">Fuente: UPCitemdb</p>';
+            if (j.found) return row('Producto', j.name) + row('Marca', j.brand) + row('Tamaño', j.size) + para(j.description) + codeRow + '<p class="lb-src">Fuente: UPCitemdb</p>';
         } catch (e) { }
-        return '<p class="lb-empty">Sin información adicional de este producto.</p>';
+        return codeRow + '<p class="lb-empty">Sin información adicional de este producto.</p>';
     },
     foodCache: {},
     foodDetails: async (code) => {
@@ -1551,19 +1557,29 @@ const app = {
     },
 
     // Categoría de grocman a partir de las categorías de Open Food Facts.
+    // Categoría a partir de las etiquetas de Open *Facts (de lo general a lo
+    // específico): se mira primero la más específica. Nombres = CATS de config.php.
     CATEGORY_RULES: [
-        ['Lácteos/Huevos', /en:(dairies|dairy|milks|cheeses|yogurts|eggs|butters|creams)/],
-        ['Proteínas', /en:(meats|poultr|fishes|seafood|sausages|hams|chickens|beef|pork)/],
-        ['Panadería', /en:(breads|bakery|pastries|viennoiseries|tortillas|cakes)/],
-        ['Bebidas', /en:(beverages|waters|juices|sodas|coffees|teas|drinks)/],
-        ['Frutas/Verduras', /en:(fruits|vegetables|fresh-vegetables|fresh-fruits|salads)/],
-        ['Higiene', /en:(cosmetics|hygiene|shampoos|toothpastes|soaps|deodorants)/],
-        ['Limpieza', /en:(cleaning|household|detergents|laundry|dishwashing)/],
+        ['Desayuno y Cereales', /^en:(breakfast-cereals|cereal-flakes|mueslis|granolas|oatmeals|porridges|breakfasts|pancake|waffles|syrups|honeys|jams|spreads|peanut-butters|hazelnut-spreads)/],
+        ['Lácteos y Huevos', /^en:(dairies|dairy|milks|cheeses|yogurts|eggs|butters|creams|plant-based-milks|milk-substitutes)/],
+        ['Carnes y Mariscos', /^en:(meats|poultr|fishes|seafood|sausages|hams|chickens|beef|pork|bacons|turkeys|tunas|salmons|shrimps)/],
+        ['Congelados', /^en:(frozen|ice-creams)/],
+        ['Panadería', /^en:(breads|bakery|pastries|viennoiseries|tortillas|cakes|biscuits-and-cakes|bagels|buns)/],
+        ['Granos y Pastas', /^en:(pastas|rices|noodles|legumes|beans|lentils|flours|grains|quinoa|couscous)/],
+        ['Salsas y Aderezos', /^en:(sauces|dressings|mayonnaises|ketchup|mustards|salsas|pestos|tomato-sauces|hot-sauces|vinegars)/],
+        ['Especias y Condimentos', /^en:(spices|condiments|salts|peppers|herbs|seasonings|bouillon|stock-cubes)/],
+        ['Bebidas', /^en:(beverages|waters|juices|sodas|coffees|teas|drinks|carbonated-drinks|energy-drinks|alcoholic-beverages|wines|beers)$/],
+        ['Frutas y Verduras', /^en:(fruits|vegetables|fresh-vegetables|fresh-fruits|salads|dried-fruits|nuts)/],
+        ['Cuidado Personal', /^en:(cosmetics|hygiene|shampoos|toothpastes|soaps|deodorants|body-washes|shower-gels|lotions|conditioners|razors|sunscreens)/],
+        ['Salud y Farmacia', /^en:(dietary-supplements|vitamins|medicines|medications|food-supplements)/],
+        ['Limpieza y Hogar', /^en:(cleaning|household|detergents|laundry|dishwashing|paper-towels|toilet-papers)/],
+        ['Despensa', /^en:(snacks|chips|crackers|cookies|chocolates|candies|sweets|canned|soups|oils|sugars|baking)/],
     ],
     categoryFromTags: (tags, host) => {
-        const all = tags.join(' ');
-        for (const [cat, re] of app.CATEGORY_RULES) if (re.test(all)) return cat;
-        if (host.includes('beauty')) return 'Higiene';
+        for (const tag of [...tags].reverse()) {
+            for (const [cat, re] of app.CATEGORY_RULES) if (re.test(tag)) return cat;
+        }
+        if (host.includes('beauty')) return 'Cuidado Personal';
         return tags.length ? (host.includes('food') ? 'Despensa' : 'Otros') : null;
     },
 
@@ -1581,7 +1597,7 @@ const app = {
                 <div class="bc-info">
                     ${b.loading ? '<div class="bc-label">Buscando producto…</div>'
                         : `<input class="bc-label-input" data-i="${i}" value="${app.esc(b.label)}" placeholder="Nombre del producto" aria-label="Nombre del producto ${app.esc(b.code)}" maxlength="200">`}
-                    <div class="bc-code">${app.esc(b.code)}${app.isISBN(b.code) ? app.isbnActionsHTML(b.code) : ''}</div>
+                    <div class="bc-code">${app.esc(b.code)}${app.codeActionsHTML(b.code)}</div>
                 </div>
                 <button type="button" class="bc-remove" data-i="${i}" aria-label="Quitar ${app.esc(b.label || b.code)}">${app.svgIcon('x')}</button>
             </div>`).join('');
@@ -1622,12 +1638,128 @@ const app = {
     // tienen portada primero. Sin Google (sin clave o sin cuota) queda Open Library.
     // from: 'add' (desde la hoja Agregar, se vuelve a ella) o el id de la lista
     // de colección donde se agregará.
-    openBookSearch: (from) => {
-        app.bookSearch = { from, q: '', page: 1, docs: [], seen: new Set(), more: false, seq: 0 };
+    openBookSearch: (from) => app.openSearch(from, 'books'),
+    // Buscar: productos (Open Food Facts + UPCitemdb) o libros (Google Books +
+    // Open Library). El modo inicial sale de la lista: Libros → libros; el resto → productos.
+    openSearch: (from, mode) => {
+        const listId = from === 'add' ? app.segValue('new-list') : from;
+        const l = app.listById(listId);
+        mode = mode || (listId === 'books' || (l && l.type === 'collection' && l.icon === 'book') ? 'books' : 'products');
+        app.bookSearch = { from, mode, q: '', page: 1, docs: [], seen: new Set(), more: false, seq: 0 };
         document.getElementById('book-search-input').value = '';
-        document.getElementById('book-results').innerHTML = '<p class="bs-hint">Escribe el título o el autor (o ambos).</p>';
+        app.applySearchMode();
         app.fitToViewport(document.getElementById('book-search-sheet'));
         app.openSheet('book-search-sheet', { focusField: true });
+    },
+    SEARCH_HINT: { products: 'Escribe el nombre del producto o su código de barras.', books: 'Escribe el título o el autor (o ambos), o su ISBN.' },
+    applySearchMode: () => {
+        const m = app.bookSearch.mode;
+        document.querySelectorAll('#search-mode .sm-opt').forEach(o => { o.classList.toggle('active', o.dataset.mode === m); o.setAttribute('aria-checked', String(o.dataset.mode === m)); });
+        document.getElementById('book-search-input').placeholder = m === 'books' ? 'Título, autor o ISBN' : 'Producto, marca o código';
+        document.getElementById('book-results').innerHTML = `<p class="bs-hint">${app.SEARCH_HINT[m]}</p>`;
+    },
+    setSearchMode: (m) => {
+        const bs = app.bookSearch;
+        if (!bs || bs.mode === m) return;
+        bs.mode = m; bs.seq++; bs.docs = []; bs.seen = new Set();
+        app.applySearchMode();
+        const q = document.getElementById('book-search-input').value.trim();
+        if (q.length >= 3) app.runSearch(q);
+        document.getElementById('book-search-input').focus({ preventScroll: true });
+    },
+    runSearch: (q) => app.bookSearch.mode === 'books' ? app.runBookSearch(q, 1) : app.runProductSearch(q),
+    // Productos: por nombre (servidor) o por código de barras (como al escanear).
+    runProductSearch: async (q) => {
+        const bs = app.bookSearch, seq = ++bs.seq, box = document.getElementById('book-results');
+        box.innerHTML = '<p class="bs-hint">Buscando…</p>';
+        bs.code = ''; bs.upc = 'ok';
+        const digits = q.replace(/[\s-]/g, '');
+        if (/^\d{8,14}$/.test(digits)) {
+            if (app.queryISBN(q)) { app.setSearchMode('books'); return; } // un ISBN es un libro
+            const code = app.normalizeBarcode(digits.length > 8 && digits.length < 12 ? digits.padStart(12, '0') : digits);
+            if (!code) { box.innerHTML = '<p class="bs-hint">Ese código no es válido: revisa los dígitos.</p>'; return; }
+            const info = await app.lookupProduct(code).catch(() => null);
+            if (seq !== bs.seq) return;
+            bs.code = code;
+            bs.docs = info ? [{ src: 'code', code, title: info.name || info.label, brand: info.brand || '', quantity: info.quantity || '', category: info.category, thumb: info.image, image: info.image, authors: [] }] : [];
+            app.renderProductResults();
+            return;
+        }
+        let j = null;
+        try {
+            const r = await fetch(`api.php?productSearch=${encodeURIComponent(q)}`);
+            if (r.status === 401) { location.reload(); return; }
+            if (r.ok) j = await r.json();
+        } catch (e) { }
+        if (seq !== bs.seq) return;
+        if (!j) { box.innerHTML = '<p class="bs-hint">No se pudo buscar. Revisa la conexión e intenta otra vez.</p>'; return; }
+        const seen = new Set(), docs = [];
+        for (const r of j.results || []) {
+            if (seen.has(r.code)) continue;
+            seen.add(r.code);
+            const img = r.src === 'off' ? r.image : (r.hasImage ? `api.php?productImage=${r.code}` : '');
+            docs.push({ ...r, thumb: r.src === 'off' ? (r.thumb || r.image) : img, image: img, authors: r.brand ? [r.brand] : [],
+                category: r.category || (r.tags ? app.categoryFromTags(r.tags, 'world.openfoodfacts.org') : null) });
+        }
+        app.rankBooks(q, docs, false);
+        bs.q = q; bs.docs = docs; bs.upc = j.upc;
+        app.renderProductResults();
+    },
+    productOwner: (d) => app.data.items.find(i => (i.barcodes || []).some(b => b.code === d.code)),
+    renderProductResults: () => {
+        const bs = app.bookSearch, box = document.getElementById('book-results');
+        if (!bs.docs.length && bs.code) {
+            const owner = app.data.items.find(i => (i.barcodes || []).some(b => b.code === bs.code));
+            box.innerHTML = owner
+                ? `<p class="bs-hint">Ese código ya está en tus listas como "${app.esc(owner.name)}".</p>`
+                : `<div class="bs-manual-box">
+                    <p class="bs-hint">No encontramos el código <strong>${bs.code}</strong> en ninguna base de productos.</p>
+                    <button type="button" class="btn-primary bs-manual">${app.svgIcon('plus')}Agregar con este código</button>
+                    <p class="bs-sub">Se abre Agregar con el código ya asociado: solo pon el nombre y la foto.</p>
+                </div>`;
+            return;
+        }
+        const busy = bs.upc === 'busy' ? '<p class="bs-sub bs-note">UPCitemdb llegó a su límite de hoy (100 consultas): solo se muestran resultados de Open Food Facts.</p>' : '';
+        if (!bs.docs.length) { box.innerHTML = '<p class="bs-hint">Sin resultados. Prueba con otras palabras o con el código de barras.</p>' + busy; return; }
+        box.innerHTML = bs.docs.map((d, i) => {
+            const owner = app.productOwner(d);
+            const img = d.thumb ? `<img src="${app.esc(d.thumb)}" alt="" loading="lazy" decoding="async">` : app.catIcon(d.category || 'Otros');
+            const meta = [d.brand, d.quantity].filter(Boolean).join(' · ');
+            return `<button type="button" class="bs-row bs-prod${owner ? ' owned' : ''}" data-i="${i}">
+                <span class="bs-cover bs-thumb-sq">${img}</span>
+                <span class="bs-text"><strong>${app.esc(d.title)}</strong>${meta ? `<span>${app.esc(meta)}</span>` : ''}<span class="bs-code">${d.code}</span>${owner ? `<em>Ya está en ${app.esc((app.listOf(owner) || {}).name || 'tus listas')}</em>` : ''}</span>
+            </button>`;
+        }).join('') + busy;
+        box.querySelectorAll('.bs-cover img').forEach(img => img.addEventListener('error', () => { img.parentElement.innerHTML = app.catIcon('Otros'); }, { once: true }));
+    },
+    // Rellena Agregar con el producto elegido (se revisa antes de guardar).
+    pickProduct: (d) => {
+        const bs = app.bookSearch;
+        bs.seq++;
+        if (bs.from === 'add') app.openSheet('add-sheet', { focusField: false });
+        else app.openAddSheet(bs.from);
+        app.updateListFields('new');
+        const name = d.title.length > 90 ? d.title.slice(0, 90).replace(/\s+\S*$/, '') : d.title;
+        document.getElementById('new-name').value = name;
+        const cat = document.getElementById('new-cat');
+        if (d.category && [...cat.options].some(o => o.value === d.category)) cat.value = d.category;
+        app.addBarcodes = app.addBarcodes.filter(b => b.code !== d.code);
+        app.addBarcodes.push({ code: d.code, label: [d.brand, d.title, d.quantity].filter(Boolean).join(' · ').slice(0, 200) });
+        app.renderBarcodes('add');
+        app.iconPickers.new.set(null);
+        if (d.image) app.iconPickers.new.fromURL(d.image);
+    },
+    addManualCode: (code) => {
+        const bs = app.bookSearch;
+        if (!code) return;
+        bs.seq++;
+        if (bs.from === 'add') app.openSheet('add-sheet', { focusField: false });
+        else app.openAddSheet(bs.from);
+        app.updateListFields('new');
+        app.addBarcodes = app.addBarcodes.filter(b => b.code !== code);
+        app.addBarcodes.push({ code, label: '' });
+        app.renderBarcodes('add');
+        app.showToast('Código asociado: escribe el nombre');
     },
     // Hoja a pantalla completa que se ajusta al área visible: con el teclado
     // del teléfono abierto, el buscador y los resultados quedan encima de él.
@@ -1660,12 +1792,14 @@ const app = {
     onBookSearchInput: () => {
         clearTimeout(app.bookSearchTimer);
         const q = document.getElementById('book-search-input').value.trim();
+        const bs = app.bookSearch;
         if (q.length < 3) {
-            app.bookSearch.seq++;
-            document.getElementById('book-results').innerHTML = '<p class="bs-hint">Escribe el título o el autor (o ambos).</p>';
+            bs.seq++;
+            document.getElementById('book-results').innerHTML = `<p class="bs-hint">${app.SEARCH_HINT[bs.mode]}</p>`;
             return;
         }
-        app.bookSearchTimer = setTimeout(() => app.runBookSearch(q, 1), 450);
+        // Productos: un poco más de espera (UPCitemdb tiene pocas consultas al día).
+        app.bookSearchTimer = setTimeout(() => app.runSearch(q), bs.mode === 'books' ? 450 : 750);
     },
     // Google Books a través del servidor: { available, results, total }.
     googleBooks: async (q, page = 1) => {
@@ -1735,7 +1869,7 @@ const app = {
     // Ordena por relevancia: cuánto del texto buscado está en el título (y en el
     // autor), título exacto, con portada, y abajo cuadernos / libros para colorear
     // / resúmenes (salvo que se busquen). Empates: el orden intercalado original.
-    rankBooks: (q, list) => {
+    rankBooks: (q, list, books = true) => {
         const norm = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
         const compact = (t) => norm(t).replace(/ /g, '');
         const words = norm(q).split(' ').filter(w => w.length > 1);
@@ -1753,7 +1887,7 @@ const app = {
             const ct = compact(b.title), cq = compact(q);
             if (ct === cq) s += 2; else if (ct.startsWith(cq) || cq.startsWith(ct)) s += 1;
             if (b.thumb) s += 1.5;
-            if (!junkOk && junk.test(norm(b.title))) s -= 2.5;
+            if (books && !junkOk && junk.test(norm(b.title))) s -= 2.5;
             return s;
         };
         list.forEach((b, i) => { b._s = score(b) - i * 0.01; });
@@ -1835,6 +1969,16 @@ const app = {
     },
     onBookResultsClick: (e) => {
         const bs = app.bookSearch;
+        if (bs.mode === 'products') {
+            if (e.target.closest('.bs-manual')) { app.addManualCode(bs.code); return; }
+            const row = e.target.closest('.bs-row');
+            const d = row && bs.docs[+row.dataset.i];
+            if (!d) return;
+            const owner = app.productOwner(d);
+            if (owner) { app.showToast(`Ese producto ya está como "${owner.name}"`); return; }
+            app.pickProduct(d);
+            return;
+        }
         if (e.target.closest('.bs-more')) { app.runBookSearch(bs.q, bs.page + 1); return; }
         if (e.target.closest('.bs-manual')) { app.addManualISBN(bs.isbn); return; }
         const row = e.target.closest('.bs-row');
@@ -1920,6 +2064,28 @@ const app = {
             <a class="isbn-act isbn-amazon" href="https://www.amazon.com/s?k=${encodeURIComponent(code)}&i=stripbooks" target="_blank" rel="noopener noreferrer" title="Buscar en Amazon" aria-label="Buscar ISBN ${c} en Amazon">a</a>
         </span>`;
     },
+    // Botones junto a un código: ISBN → copiar / Google / Amazon; otros (UPC/EAN)
+    // → copiar / Google / "Tiendas" (se despliega con Walmart, Target, Best Buy…).
+    codeActionsHTML: (code) => app.isISBN(code) ? app.isbnActionsHTML(code) : app.upcActionsHTML(code),
+    STORES: [
+        ['Walmart', 'walmart', 'https://www.walmart.com/search?q='],
+        ['Target', 'target', 'https://www.target.com/s?searchTerm='],
+        ['Best Buy', 'bestbuy', 'https://www.bestbuy.com/site/searchpage.jsp?st='],
+        ['Amazon', 'amazon', 'https://www.amazon.com/s?k='],
+        ['Costco', 'costco', 'https://www.costco.com/CatalogSearch?keyword='],
+        ['eBay', 'ebay', 'https://www.ebay.com/sch/i.html?_nkw='],
+        ['UPCitemdb', 'upcitemdb', 'https://www.upcitemdb.com/upc/'],
+    ],
+    upcActionsHTML: (code) => {
+        // Las tiendas de EE. UU. buscan por UPC-A (12 dígitos): se quita el 0 del EAN-13.
+        const upc = code.length === 13 && code[0] === '0' ? code.slice(1) : code, c = app.esc(code);
+        return `<span class="isbn-actions">
+            <button type="button" class="isbn-act isbn-copy" data-copy="${upc}" title="Copiar código" aria-label="Copiar código ${c}">${app.svgIcon('copy')}</button>
+            <a class="isbn-act isbn-google" href="https://www.google.com/search?q=${upc}" target="_blank" rel="noopener noreferrer" title="Buscar en Google" aria-label="Buscar ${c} en Google"><span class="g-mark">G</span></a>
+            <button type="button" class="isbn-act store-toggle" aria-expanded="false" title="Buscar en tiendas" aria-label="Buscar ${c} en tiendas">${app.svgIcon('bag')}<span>Tiendas</span>${app.svgIcon('chevron', 'lucide st-chev')}</button>
+        </span>
+        <span class="store-links" hidden>${app.STORES.map(([n, k, u]) => `<a class="store-link st-${k}" href="${u}${upc}" target="_blank" rel="noopener noreferrer">${n}</a>`).join('')}</span>`;
+    },
     copyText: async (text) => {
         let ok = false;
         try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
@@ -1930,7 +2096,7 @@ const app = {
             try { ok = document.execCommand('copy'); } catch (e2) { }
             t.remove();
         }
-        app.showToast(ok ? 'ISBN copiado' : 'No se pudo copiar');
+        app.showToast(ok ? (app.isISBN(text) ? 'ISBN copiado' : 'Código copiado') : 'No se pudo copiar');
     },
 
     // ISBN-13 (978/979): el código de barras de un libro.

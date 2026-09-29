@@ -193,7 +193,7 @@ if (!isAuthenticated()) {
                 <div class="barcode-list" id="new-barcodes"></div>
                 <div class="scan-row">
                     <button type="button" class="btn-scan" onclick="app.scanForAdd()"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg><span>Escanear producto</span></button>
-                    <button type="button" class="btn-scan" id="new-booksearch" onclick="app.openBookSearch('add')" hidden><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span>Buscar libro</span></button>
+                    <button type="button" class="btn-scan" id="new-booksearch" onclick="app.openSearch('add')"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span>Buscar</span></button>
                 </div>
             </div>
             <div class="field">
@@ -455,12 +455,16 @@ if (!isAuthenticated()) {
     <!-- Sheet: buscar un libro por título / autor (Open Library) -->
     <div id="book-search-sheet" class="sheet sheet-full" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="book-search-title">
         <div class="bs-head">
-            <h3 class="sheet-title" id="book-search-title">Buscar libro</h3>
+            <h3 class="sheet-title" id="book-search-title">Buscar</h3>
             <button type="button" class="bs-close" onclick="app.closeBookSearch()" aria-label="Cerrar búsqueda"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div class="search-mode" id="search-mode" role="radiogroup" aria-label="Buscar">
+            <button type="button" class="sm-opt" role="radio" data-mode="products" onclick="app.setSearchMode('products')">Productos</button>
+            <button type="button" class="sm-opt" role="radio" data-mode="books" onclick="app.setSearchMode('books')">Libros</button>
         </div>
         <div class="book-search-box">
             <svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="search" id="book-search-input" placeholder="Título, autor o ambos" autocomplete="off" enterkeyhint="search" aria-label="Buscar libro por título o autor" oninput="app.onBookSearchInput()">
+            <input type="search" id="book-search-input" placeholder="Título, autor o ambos" autocomplete="off" enterkeyhint="search" aria-label="Buscar" oninput="app.onBookSearchInput()">
         </div>
         <div class="book-results" id="book-results" aria-live="polite" onclick="app.onBookResultsClick(event)"></div>
     </div>

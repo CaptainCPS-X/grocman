@@ -284,6 +284,80 @@ function serveProductImage($code) {
     fail(404, 'No se pudo obtener la foto del producto.');
 }
 
+// --- Buscar productos por nombre ---
+// Open Food Facts (alimentos; su buscador no permite CORS) y UPCitemdb (todo
+// lo demás: electrónica, juguetes…; 100 consultas/día compartidas con el
+// escaneo). Cada búsqueda de UPCitemdb se guarda 7 días en products.json, y sus
+// productos quedan en la caché de códigos (la foto y el escaneo no gastan más).
+function offSearchUrl() { return getenv('GROCMAN_OFF_SEARCH_URL') ?: 'https://search.openfoodfacts.org/search'; }
+function upcSearchUrl() { return getenv('GROCMAN_UPC_SEARCH_URL') ?: 'https://api.upcitemdb.com/prod/trial/search'; }
+const PRODUCT_SEARCH_TTL = 604800;
+// Código de barras de un resultado (UPC de 11–12 dígitos se completa a EAN-13).
+function searchCode($c) {
+    $c = preg_replace('/\D/', '', (string)$c);
+    if (strlen($c) >= 8 && strlen($c) < 12) { $c = str_pad($c, 12, '0', STR_PAD_LEFT); }
+    return normalizeBarcode($c);
+}
+function searchProducts($q) {
+    if (!function_exists('curl_init')) { return ['results' => [], 'upc' => 'off']; }
+    $out = [];
+    // Open Food Facts
+    $r = httpGet(offSearchUrl() . '?' . http_build_query(['q' => $q, 'page_size' => 12, 'langs' => 'es,en',
+        'fields' => 'code,product_name,product_name_es,product_name_en,brands,quantity,categories_tags,image_front_small_url,image_front_url']), 2000000);
+    $j = json_decode($r['body'], true);
+    foreach ((array)($j['hits'] ?? []) as $h) {
+        $code = searchCode($h['code'] ?? '');
+        $name = trim((string)($h['product_name_es'] ?? '') ?: (string)($h['product_name'] ?? '') ?: (string)($h['product_name_en'] ?? ''));
+        if (!$code || $name === '') { continue; }
+        $brands = is_array($h['brands'] ?? null) ? implode(', ', $h['brands']) : (string)($h['brands'] ?? '');
+        $img = (string)($h['image_front_url'] ?? '');
+        $out[] = [
+            'src' => 'off', 'code' => $code, 'title' => cutText($name, 200), 'brand' => cutText(trim(explode(',', $brands)[0]), 100),
+            'quantity' => cutText(trim((string)($h['quantity'] ?? '')), 60),
+            'tags' => array_slice(array_values(array_filter((array)($h['categories_tags'] ?? []), 'is_string')), 0, 30),
+            'thumb' => preg_match('#^https://images\.openfoodfacts\.org/#', (string)($h['image_front_small_url'] ?? '')) ? $h['image_front_small_url'] : '',
+            'image' => preg_match('#^https://images\.openfoodfacts\.org/#', $img) ? $img : '',
+        ];
+    }
+    // UPCitemdb (con caché)
+    $key = 's:' . strtolower(preg_replace('/\s+/', ' ', trim($q)));
+    $upc = 'ok';
+    $items = withProductCache(function (&$cache) use ($key, $q, &$upc) {
+        $hit = $cache[$key] ?? null;
+        if ($hit && time() - $hit['t'] < PRODUCT_SEARCH_TTL) {
+            return array_values(array_filter(array_map(function ($c) use ($cache) { return isset($cache[$c]) && $cache[$c]['found'] ? ['code' => $c] + $cache[$c] : null; }, $hit['codes'])));
+        }
+        $r = httpGet(upcSearchUrl() . '?' . http_build_query(['s' => $q, 'match_mode' => 0, 'type' => 'product']), 1500000);
+        $json = json_decode($r['body'], true);
+        if ($r['status'] === 429 || in_array($json['code'] ?? '', ['TOO_FAST', 'EXCEED_LIMIT'], true)) { $upc = 'busy'; return []; }
+        if (!$r['ok'] || !is_array($json) || ($json['code'] ?? '') !== 'OK') { $upc = 'error'; return []; }
+        $codes = []; $list = [];
+        foreach (array_slice((array)($json['items'] ?? []), 0, 12) as $item) {
+            $code = searchCode($item['ean'] ?? ($item['upc'] ?? ''));
+            $title = trim(preg_replace('/\s+/', ' ', (string)($item['title'] ?? '')));
+            if (!$code || $title === '') { continue; }
+            $images = array_values(array_filter((array)($item['images'] ?? []), function ($u) { return is_string($u) && preg_match('#^https?://#i', $u); }));
+            $entry = [
+                't' => time(), 'v' => 2, 'found' => true, 'title' => $title,
+                'brand' => trim((string)($item['brand'] ?? '')),
+                'category' => categoryFromUpc((string)($item['category'] ?? ''), $title),
+                'images' => array_slice($images, 0, 3),
+                'description' => cutText(trim(preg_replace('/\s+/', ' ', (string)($item['description'] ?? ''))), 700),
+                'size' => trim((string)($item['size'] ?? '')),
+            ];
+            if (empty($cache[$code]['found'])) { $cache[$code] = $entry; }
+            $codes[] = $code; $list[] = ['code' => $code] + $cache[$code];
+        }
+        $cache[$key] = ['t' => time(), 'codes' => $codes];
+        return $list;
+    });
+    foreach ($items as $e) {
+        $out[] = ['src' => 'upc', 'code' => $e['code'], 'title' => cutText($e['title'], 200), 'brand' => cutText($e['brand'], 100),
+            'quantity' => cutText($e['size'] ?? '', 60), 'category' => $e['category'], 'hasImage' => !empty($e['images'])];
+    }
+    return ['results' => $out, 'upc' => $upc];
+}
+
 // --- Google Books (fuente principal para buscar libros) ---
 // La clave vive solo en el servidor, en google.php (no se versiona):
 //   <?php const GOOGLE_BOOKS_KEY = '...';
@@ -631,6 +705,13 @@ if ($method === 'GET') {
             ? ['found' => true, 'name' => $p['title'], 'brand' => $p['brand'], 'category' => $p['category'], 'hasImage' => !empty($p['images']),
                'description' => $p['description'] ?? '', 'size' => $p['size'] ?? '']
             : ['found' => false]);
+        exit();
+    }
+    if (isset($_GET['productSearch'])) {
+        $q = trim((string)$_GET['productSearch']);
+        if (strlen($q) < 2 || strlen($q) > 200) { fail(400, 'Búsqueda inválida.'); }
+        session_write_close();
+        echo json_encode(searchProducts($q), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit();
     }
     if (isset($_GET['books'])) {

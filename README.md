@@ -61,6 +61,15 @@ en la URL (`#listas/books`): al recargar se vuelve al mismo lugar.
   se pide una confirmación más. El servidor guarda una copia
   (`data/backups/items-antes-borrar-lista-*.json`) antes de borrar una lista.
   Un artículo cambia de lista desde Editar → "Lista".
+**Buscar** (en Agregar y junto a "Agregar a …" en cada lista) tiene dos modos:
+**Productos** — por nombre en Open Food Facts (alimentos) y UPCitemdb (todo lo
+demás: electrónica, juguetes…), vía el servidor (`api.php?productSearch=`; cada
+búsqueda de UPCitemdb se guarda 7 días en `products.json`), o por código de
+barras (si no está: "Agregar con este código") — y **Libros** (ver arriba). El
+modo inicial depende de la lista. Junto a cada código de producto hay copiar,
+Google y **Tiendas** (Walmart, Target, Best Buy, Amazon, Costco, eBay,
+UPCitemdb), que buscan el UPC de 12 dígitos.
+
 Tocar un artículo abre su **vista previa** (el botón ✎ lleva a Editar; tocar la
 imagen la abre sola a pantalla completa, con zoom al pellizcar o con doble
 toque) con su información:
