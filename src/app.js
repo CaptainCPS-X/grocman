@@ -1908,11 +1908,12 @@ const app = {
     },
 
     // Botones junto a un ISBN: copiarlo y buscarlo en Google o Amazon (libros).
+    // En Google se busca como "978-1957290584" (sin la palabra ISBN): da resultados más precisos.
     isbnActionsHTML: (code) => {
         const c = app.esc(code);
         return `<span class="isbn-actions">
             <button type="button" class="isbn-act isbn-copy" data-copy="${c}" title="Copiar ISBN" aria-label="Copiar ISBN ${c}">${app.svgIcon('copy')}</button>
-            <a class="isbn-act isbn-google" href="https://www.google.com/search?q=${encodeURIComponent('ISBN ' + code)}" target="_blank" rel="noopener noreferrer" title="Buscar en Google" aria-label="Buscar ISBN ${c} en Google"><span class="g-mark">G</span></a>
+            <a class="isbn-act isbn-google" href="https://www.google.com/search?q=${encodeURIComponent(code.length === 13 ? code.slice(0, 3) + '-' + code.slice(3) : code)}" target="_blank" rel="noopener noreferrer" title="Buscar en Google" aria-label="Buscar ISBN ${c} en Google"><span class="g-mark">G</span></a>
             <a class="isbn-act isbn-amazon" href="https://www.amazon.com/s?k=${encodeURIComponent(code)}&i=stripbooks" target="_blank" rel="noopener noreferrer" title="Buscar en Amazon" aria-label="Buscar ISBN ${c} en Amazon">a</a>
         </span>`;
     },
